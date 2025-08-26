@@ -1,0 +1,33 @@
+{
+  "originHash" : "4ae8faedd3fd0459a21165d44fc0f183edc6bce90be1dfff834e5bd84ce52fc5",
+  "pins" : [
+    {
+      "identity" : "karrotcodablekit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/daangn/KarrotCodableKit.git",
+      "state" : {
+        "revision" : "35692d880982ba610b38ecf794fe1b8e1cef5b44",
+        "version" : "1.4.0"
+      }
+    },
+    {
+      "identity" : "swift-memberwise-init-macro",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/gohanlon/swift-memberwise-init-macro.git",
+      "state" : {
+        "revision" : "47a2bdf45f1567e7324438f8482e362ee1c3fb44",
+        "version" : "0.5.2"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax",
+      "state" : {
+        "revision" : "0687f71944021d616d34d922343dcef086855920",
+        "version" : "600.0.1"
+      }
+    }
+  ],
+  "version" : 3
+}
