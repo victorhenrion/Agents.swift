@@ -3,7 +3,7 @@ import KarrotCodableKit
 import MemberwiseInit
 
 @MemberwiseInit(.public)
-public struct ChatMessage: Codable {
+public struct ChatMessage: Codable, Identifiable {
     public let id: String  //                               id: string
     public let createdAt: Date?  //                         createdAt?: Date
     //public let content: String
