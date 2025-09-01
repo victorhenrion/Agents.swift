@@ -144,7 +144,9 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     }
 
     // todo: implement cancel message
-    public func sendMessage(message: ChatMessage) async throws -> ChatMessage {
+    public func sendMessage(
+        message: ChatMessage, body: [String: AnyEncodable] = [:]
+    ) async throws -> ChatMessage {
         let id = UUID().uuidString
 
         return try await withCheckedThrowingContinuation {
@@ -156,10 +158,10 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                     reject: { continuation.resume(throwing: $0) }
                 )
             }
-
-            let body =
-                String(decoding: try! jsonEncoder.encode(["messages": [message]]), as: UTF8.self)
-            let data = CFAgentUseChatRequest(id: id, init: ["body": body, "method": "POST"])
+            var body = body
+            body["messages"] = [message]
+            let bodyStr = String(decoding: try! jsonEncoder.encode(body), as: UTF8.self)
+            let data = CFAgentUseChatRequest(id: id, init: ["body": bodyStr, "method": "POST"])
             ws.send(data: try! jsonEncoder.encode(data))
 
             messages.append(message)
