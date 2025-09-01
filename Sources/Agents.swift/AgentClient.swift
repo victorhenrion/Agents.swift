@@ -148,6 +148,18 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         message: ChatMessage,
         body: [String: AnyEncodable] = [:]
     ) async throws -> ChatMessage {
+        return try await sendChatRequest(
+            message: message,
+            body: body,
+            onSent: { messages.append(message) }
+        )
+    }
+
+    func sendChatRequest(
+        message: ChatMessage,
+        body: [String: AnyEncodable] = [:],
+        onSent: () -> Void
+    ) async throws -> ChatMessage {
 
             var body = body
             body["messages"] = [message]
@@ -170,7 +182,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
             )
 
             ws.send(data: chatReqData)
-            messages.append(message)
+            onSent()
         }
     }
 
@@ -193,6 +205,55 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 
             ws.send(data: rpcReqData)
         }
+    }
+
+    public func addToolResult(
+        toolCallId: String,
+        result: AnyCodable?
+    ) async throws -> ChatMessage {
+        guard let lastMsg = messages.last else {
+            throw AgentError.chat("Tool invocation not found (no messages)")
+        }
+
+        var found: Bool = false
+
+        let updatedParts = lastMsg.parts.map { part in
+            switch part {
+            case .toolInvocation(let part) where part.toolInvocation.toolCallId == toolCallId:
+                found = true
+                let prev = part.toolInvocation
+                return ChatMessage.Part.toolInvocation(
+                    .init(
+                        toolInvocation: .init(
+                            state: .result,
+                            toolCallId: prev.toolCallId,
+                            toolName: prev.toolName,
+                            args: prev.args,
+                            result: result,
+                            step: prev.step,
+                        )
+                    )
+                )
+            default:
+                return part
+            }
+        }
+
+        if !found { throw AgentError.chat("Tool invocation not found") }  // maybe don't throw?
+
+        let updatedMsg = ChatMessage(
+            id: lastMsg.id,
+            createdAt: lastMsg.createdAt,
+            experimental_attachments: lastMsg.experimental_attachments,
+            role: lastMsg.role,
+            annotations: lastMsg.annotations,
+            parts: updatedParts
+        )
+
+        return try await sendChatRequest(
+            message: updatedMsg,
+            onSent: { messages[messages.count - 1] = updatedMsg }
+        )
     }
 
     func upsertAssistantMessage(_ message: ChatMessage) {
