@@ -112,6 +112,12 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                 if msg.done == true {
                     task.resolve(snapshot)
                     chatTasks.removeValue(forKey: msg.id)
+                    // advertise tool calls
+                    for p in snapshot.parts {
+                        if case .toolInvocation(let p) = p, p.toolInvocation.state == .call {
+                            options.onToolCall?(p.toolInvocation, self)
+                        }
+                    }
                 }
                 return
             case .cf_agent_chat_clear:
@@ -161,8 +167,8 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         onSent: () -> Void
     ) async throws -> ChatMessage {
 
-            var body = body
-            body["messages"] = [message]
+        var body = body
+        body["messages"] = [message]
 
         let requestId = UUID().uuidString
         let requestInit = [
@@ -201,7 +207,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
             rpcTasks[requestId] = RPCTask(
                 resolve: { r in cont.resume(returning: r as! Result) },
                 reject: { e in cont.resume(throwing: e) }
-                )
+            )
 
             ws.send(data: rpcReqData)
         }
@@ -296,6 +302,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 
 @MemberwiseInit(.public)
 public struct AgentClientOptions<State: Codable> {
+    public let onToolCall: ((ChatMessage.ToolInvocation, AgentClient<State>) -> Void)?
     public let onClientStateUpdate: ((State, AgentClient<State>) -> Void)?
     public let onServerStateUpdate: ((State, AgentClient<State>) -> Void)?
     public let onMcpUpdate: ((MCPServersState, AgentClient<State>) -> Void)?
