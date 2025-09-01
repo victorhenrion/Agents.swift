@@ -4,6 +4,7 @@ import MemberwiseInit
 
 // todo: add direct http request support
 // todo: handle task timeout
+// todo: implement cancel message (?)
 @Observable
 public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     private let wsUrl: URL
@@ -143,45 +144,54 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 
     }
 
-    // todo: implement cancel message
     public func sendMessage(
-        message: ChatMessage, body: [String: AnyEncodable] = [:]
+        message: ChatMessage,
+        body: [String: AnyEncodable] = [:]
     ) async throws -> ChatMessage {
-        let id = UUID().uuidString
 
-        return try await withCheckedThrowingContinuation {
-            (continuation: CheckedContinuation<ChatMessage, Error>) in
-            Task {
-                chatTasks[id] = ChatTask(
-                    builder: ChatMessageBuilder(),
-                    resolve: { continuation.resume(returning: $0) },
-                    reject: { continuation.resume(throwing: $0) }
-                )
-            }
             var body = body
             body["messages"] = [message]
-            let bodyStr = String(decoding: try! jsonEncoder.encode(body), as: UTF8.self)
-            let data = CFAgentUseChatRequest(id: id, init: ["body": bodyStr, "method": "POST"])
-            ws.send(data: try! jsonEncoder.encode(data))
 
+        let requestId = UUID().uuidString
+        let requestInit = [
+            "body": String(decoding: try jsonEncoder.encode(body), as: UTF8.self),
+            "method": "POST",
+        ]
+
+        let chatReq = CFAgentUseChatRequest(id: requestId, init: requestInit)
+        let chatReqData = try jsonEncoder.encode(chatReq)
+
+        return try await withCheckedThrowingContinuation { cont in
+
+            chatTasks[requestId] = ChatTask(
+                builder: ChatMessageBuilder(),
+                resolve: { r in cont.resume(returning: r) },
+                reject: { e in cont.resume(throwing: e) }
+            )
+
+            ws.send(data: chatReqData)
             messages.append(message)
         }
     }
 
-    public func call<Result: Codable>(method: String, args: [AnyCodable]) async throws -> Result {
-        let id = UUID().uuidString
+    public func call<Result: Codable>(
+        method: String,
+        args: [AnyCodable]
+    ) async throws -> Result {
 
-        return try await withCheckedThrowingContinuation {
-            (continuation: CheckedContinuation<Result, Error>) in
-            Task {
-                rpcTasks[id] = RPCTask(
-                    resolve: { continuation.resume(returning: $0 as! Result) },
-                    reject: { continuation.resume(throwing: $0) },
+        let requestId = UUID().uuidString
+
+        let rpcReq = RPCRequest(id: requestId, method: method, args: args)
+        let rpcReqData = try jsonEncoder.encode(rpcReq)
+
+        return try await withCheckedThrowingContinuation { cont in
+
+            rpcTasks[requestId] = RPCTask(
+                resolve: { r in cont.resume(returning: r as! Result) },
+                reject: { e in cont.resume(throwing: e) }
                 )
-            }
 
-            let data = RPCRequest(id: id, method: method, args: args)
-            ws.send(data: try! jsonEncoder.encode(data))
+            ws.send(data: rpcReqData)
         }
     }
 
