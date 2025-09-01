@@ -65,10 +65,10 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 
             switch incomingMessage {
             case .cf_agent_state(let msg):
-                options.onServerStateUpdate?(msg.state as! State)
+                options.onServerStateUpdate?(msg.state as! State, self)
                 return
             case .cf_agent_mcp_servers(let msg):
-                options.onMcpUpdate?(msg.mcp)
+                options.onMcpUpdate?(msg.mcp, self)
                 return
             case .rpc(let msg):
                 // todo: actually build from the stream
@@ -208,7 +208,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     public func setState(_ state: State) {
         let data = CFAgentState(state: state)
         ws.send(data: try! jsonEncoder.encode(data))
-        options.onClientStateUpdate?(state)
+        options.onClientStateUpdate?(state, self)
     }
 
     public func cancelChatRequest(id: String) {
@@ -225,9 +225,9 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 
 @MemberwiseInit(.public)
 public struct AgentClientOptions<State: Codable> {
-    public let onClientStateUpdate: ((State) -> Void)?
-    public let onServerStateUpdate: ((State) -> Void)?
-    public let onMcpUpdate: ((MCPServersState) -> Void)?
+    public let onClientStateUpdate: ((State, AgentClient<State>) -> Void)?
+    public let onServerStateUpdate: ((State, AgentClient<State>) -> Void)?
+    public let onMcpUpdate: ((MCPServersState, AgentClient<State>) -> Void)?
     public let headers: [String: String]?
 }
 
