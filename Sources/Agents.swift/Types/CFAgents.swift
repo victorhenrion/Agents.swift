@@ -22,9 +22,13 @@ struct CFAgentMcpServers {
 @MemberwiseInit(.public)
 public struct MCPServersState: Codable {
     public let servers: [String: MCPServer]
-    public let tools: [AnyCodable]
-    public let prompts: [AnyCodable]
-    public let resources: [AnyCodable]
+    public let tools: [Tool]
+    public let prompts: [Prompt]
+    public let resources: [Resource]
+
+    public typealias Tool = [String: AnyCodable]  // placeholder for more precise type
+    public typealias Prompt = [String: AnyCodable]  // placeholder for more precise type
+    public typealias Resource = [String: AnyCodable]  // placeholder for more precise type
 }
 
 @MemberwiseInit(.public)
@@ -34,7 +38,7 @@ public struct MCPServer: Codable {
     public let auth_url: String?
     public let state: State
     public let instructions: String?
-    public let capabilities: AnyCodable?
+    public let capabilities: Capabilities?
 
     public enum State: String, Codable {
         case authenticating
@@ -43,6 +47,8 @@ public struct MCPServer: Codable {
         case discovering
         case failed
     }
+
+    public typealias Capabilities = [String: AnyCodable]  // placeholder for more precise type
 }
 
 @PolymorphicCodable(identifier: "cf_agent_state")
@@ -51,7 +57,8 @@ struct CFAgentState<State: Codable> {
     let state: State
 }
 
-@PolymorphicEnumCodable(identifierCodingKey: "type")
+//# region Incoming only
+@PolymorphicEnumDecodable(identifierCodingKey: "type")
 enum IncomingMessage {
     case cf_agent_chat_clear(CFAgentChatClear)
     case cf_agent_chat_messages(CFAgentChatMessages)
@@ -61,7 +68,7 @@ enum IncomingMessage {
     case rpc(RPCResponse<AnyCodable>)
 }
 
-@PolymorphicCodable(identifier: "cf_agent_use_chat_response")
+@PolymorphicDecodable(identifier: "cf_agent_use_chat_response")
 struct CFAgentUseChatResponse {
     let type = "cf_agent_use_chat_response"
     let id: String
@@ -69,7 +76,7 @@ struct CFAgentUseChatResponse {
     let done: Bool?
 }
 
-@PolymorphicCodable(identifier: "rpc")
+@PolymorphicDecodable(identifier: "rpc")
 struct RPCResponse<Result: Codable> {
     let type = "rpc"
     let id: String
@@ -78,8 +85,10 @@ struct RPCResponse<Result: Codable> {
     let done: Bool?
     let error: String?
 }
+//#endregion
 
-@PolymorphicEnumCodable(identifierCodingKey: "type")
+//# region Outgoing only
+@PolymorphicEnumEncodable(identifierCodingKey: "type")
 enum OutgoingMessage {
     case cf_agent_chat_clear(CFAgentChatClear)
     case cf_agent_chat_messages(CFAgentChatMessages)
@@ -90,23 +99,24 @@ enum OutgoingMessage {
     case rpc(RPCRequest<[AnyEncodable]>)
 }
 
-@PolymorphicCodable(identifier: "cf_agent_chat_request_cancel")
+@PolymorphicEncodable(identifier: "cf_agent_chat_request_cancel")
 struct CFAgentChatRequestCancel {
     let type = "cf_agent_chat_request_cancel"
     let id: String
 }
 
-@PolymorphicCodable(identifier: "cf_agent_use_chat_request")
+@PolymorphicEncodable(identifier: "cf_agent_use_chat_request")
 struct CFAgentUseChatRequest {
     let type = "cf_agent_use_chat_request"
     let id: String
     let `init`: [String: String]
 }
 
-@PolymorphicCodable(identifier: "rpc")
+@PolymorphicEncodable(identifier: "rpc")
 struct RPCRequest<Args: Encodable & Collection> where Args.Element: Encodable, Args.Index == Int {
     let type = "rpc"
     let id: String
     let method: String
     let args: Args  // an array of args
 }
+//# endregion
