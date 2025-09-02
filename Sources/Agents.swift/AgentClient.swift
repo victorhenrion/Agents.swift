@@ -62,7 +62,9 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 
             switch incomingMessage {
             case .cf_agent_state(let msg):
-                options.onServerStateUpdate?(msg.state as! State, self)
+                if let state = msg.state as? State {
+                    options.onServerStateUpdate?(state, self)
+                }  // fails silently
                 return
             case .cf_agent_mcp_servers(let msg):
                 options.onMcpUpdate?(msg.mcp, self)
@@ -266,28 +268,28 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         }
     }
 
-    public func setMessages(_ messages: [ChatMessage]) {
-        self.messages = messages
+    public func setMessages(_ messages: [ChatMessage]) throws {
         let data = CFAgentChatMessages(messages: messages)
-        ws.send(data: try! jsonEncoder.encode(data))
+        ws.send(data: try jsonEncoder.encode(data))
+        self.messages = messages
     }
 
     public func clearHistory() {
-        self.messages = []
         let data = CFAgentChatClear()
-        ws.send(data: try! jsonEncoder.encode(data))
+        ws.send(data: try! jsonEncoder.encode(data))  // should be safe
+        self.messages = []
     }
 
-    public func setState(_ state: State) {
+    public func setState(_ state: State) throws {
         let data = CFAgentState(state: state)
-        ws.send(data: try! jsonEncoder.encode(data))
+        ws.send(data: try jsonEncoder.encode(data))
         options.onClientStateUpdate?(state, self)
     }
 
     public func cancelChatRequest(id: String) {
-        chatTasks.removeValue(forKey: id)
         let data = CFAgentChatRequestCancel(id: id)
-        ws.send(data: try! jsonEncoder.encode(data))
+        ws.send(data: try! jsonEncoder.encode(data))  // should be safe
+        chatTasks.removeValue(forKey: id)
     }
 
     public func cancelAllChatRequests() {
