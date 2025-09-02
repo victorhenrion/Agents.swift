@@ -11,7 +11,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     private var ws: WebSocketConnection
     private let options: AgentClientOptions<State>
     private var chatTasks: [String: ChatTask] = [:]
-    private var rpcTasks: [String: RPCTask<AnyCodable>] = [:]
+    private var rpcTasks: [String: AnyRPCTask] = [:]
     public private(set) var messages: [ChatMessage] = []
 
     public init(
@@ -69,14 +69,13 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
             case .cf_agent_mcp_servers(let msg):
                 options.onMcpUpdate?(msg.mcp, self)
                 return
-            case .rpc(let msg):
-                // todo: actually build from the stream
+            case .rpc(let msg):  // TODO: STREAMING SUPPORT
                 guard let task = rpcTasks[msg.id] else {
                     return
                 }
                 guard let result = msg.result, msg.success == true else {
                     // handle error
-                    task.reject(AgentError.rpc(msg.error))
+                    task.reject(AgentError.rpcError(id: msg.id, error: msg.error))
                     rpcTasks.removeValue(forKey: msg.id)
                     return
                 }
@@ -92,8 +91,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                     rpcTasks.removeValue(forKey: msg.id)
                 }
                 return
-            case .cf_agent_use_chat_response(let msg):
-                // todo: handle non-streaming response
+            case .cf_agent_use_chat_response(let msg):  // streaming only
                 guard var task = chatTasks[msg.id] else {
                     return
                 }
@@ -190,10 +188,12 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         }
     }
 
-    public func call<Result: Codable>(
+    public func call<Args: Encodable & Collection, Result: Decodable>(
         method: String,
-        args: [AnyCodable]
-    ) async throws -> Result {
+        args: Args,
+        resultType: Result.Type = Result.self
+    ) async throws -> Result
+    where Args.Element: Encodable, Args.Index == Int {
 
         let requestId = UUID().uuidString
 
@@ -203,8 +203,8 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         return try await withCheckedThrowingContinuation { cont in
 
             rpcTasks[requestId] = RPCTask(
-                resolve: { r in cont.resume(returning: r as! Result) },
-                reject: { e in cont.resume(throwing: e) }
+                onResolve: { r in cont.resume(returning: r) },
+                onReject: { e in cont.resume(throwing: e) }
             )
 
             ws.send(data: rpcReqData)
@@ -216,7 +216,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         result: AnyCodable?
     ) async throws -> ChatMessage {
         guard let lastMsg = messages.last else {
-            throw AgentError.chat("Tool invocation not found (no messages)")
+            throw AgentError.toolCallNotFound(id: toolCallId, "No messages")
         }
 
         var found: Bool = false
@@ -243,7 +243,9 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
             }
         }
 
-        if !found { throw AgentError.chat("Tool invocation not found") }  // maybe don't throw?
+        if !found {
+            throw AgentError.toolCallNotFound(id: toolCallId)
+        }
 
         let updatedMsg = ChatMessage(
             id: lastMsg.id,
@@ -307,9 +309,26 @@ public struct AgentClientOptions<State: Codable> {
     public let headers: [String: String]?
 }
 
-struct RPCTask<Result: Codable> {
-    let resolve: (Result) -> Void
-    let reject: (Error) -> Void
+protocol AnyRPCTask {
+    func resolve(_: Codable)
+    func reject(_: Error)
+}
+
+struct RPCTask<Result: Decodable>: AnyRPCTask {
+    let onResolve: (Result) -> Void
+    let onReject: (Error) -> Void
+
+    func resolve(_ r: Codable) {
+        do {
+            onResolve(try jsonDecoder.decode(Result.self, from: try jsonEncoder.encode(r)))
+        } catch {
+            onReject(AgentError.rpcResultMismatch(type: Result.self))
+        }
+    }
+
+    func reject(_ e: Error) {
+        onReject(e)
+    }
 }
 
 struct ChatTask {
@@ -319,6 +338,7 @@ struct ChatTask {
 }
 
 public enum AgentError: Error {
-    case rpc(String?)
-    case chat(String?)
+    case toolCallNotFound(id: String, String? = nil)
+    case rpcError(id: String, error: String?)
+    case rpcResultMismatch(type: Decodable.Type)
 }
