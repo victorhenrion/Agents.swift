@@ -37,11 +37,18 @@ class WebSocketTaskConnection: NSObject, WebSocketConnection, URLSessionWebSocke
     var textEncoding: String.Encoding
 
     init(
-        url: URL,
+        url inputURL: URL,
         headers: [String: String]? = nil,
         messageFormat: WebSocketMessageFormat = .preserve,
         textEncoding: String.Encoding = .utf8
     ) {
+        let url = {
+            guard var c = URLComponents(url: inputURL, resolvingAgainstBaseURL: false)
+            else { return inputURL }
+            c.scheme = c.scheme?.replacingOccurrences(of: "http", with: "ws")
+            return c.url ?? inputURL
+        }()
+
         self.messageFormat = messageFormat
         self.textEncoding = textEncoding
         super.init()

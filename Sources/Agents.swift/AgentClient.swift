@@ -7,7 +7,7 @@ import MemberwiseInit
 // todo: implement cancel message (?)
 @Observable
 public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
-    private let wsUrl: URL
+    private let instanceURL: URL
     private var ws: WebSocketConnection
     private let options: AgentClientOptions<State>
     private var chatTasks: [String: ChatTask] = [:]
@@ -22,14 +22,13 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     ) async {
         self.options = options
 
-        var urlComps = URLComponents(url: baseURL, resolvingAgainstBaseURL: true)!
-        urlComps.scheme = urlComps.scheme?.replacingOccurrences(of: "http", with: "ws")
-        urlComps.path = urlComps.path.appending("/\(camelCaseToKebabCase(agentNamespace))")
-        urlComps.path = urlComps.path.appending("/\(instanceName)")
-        self.wsUrl = urlComps.url!
+        self.instanceURL =
+            baseURL
+            .appending(path: camelCaseToKebabCase(agentNamespace))
+            .appending(path: instanceName)
 
         self.ws = WebSocketTaskConnection(
-            url: wsUrl, headers: options.headers, messageFormat: .text
+            url: instanceURL, headers: options.headers, messageFormat: .text
         )
         ws.delegate = self
 
@@ -43,10 +42,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     }
 
     func loadInitialMessages() async throws {
-        var urlComps = URLComponents(url: wsUrl, resolvingAgainstBaseURL: true)!
-        urlComps.scheme = urlComps.scheme?.replacingOccurrences(of: "ws", with: "http")
-        urlComps.path = urlComps.path.appending("/get-messages")
-        let url = urlComps.url!
+        let url = self.instanceURL.appending(path: "get-messages")
 
         var request = URLRequest(url: url)
         if let headers = options.headers {
