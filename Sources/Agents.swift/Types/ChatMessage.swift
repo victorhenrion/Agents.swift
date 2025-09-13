@@ -26,7 +26,7 @@ public struct ChatMessage: Codable, Identifiable {
         case data
     }
 
-    @PolymorphicEnumCodable(identifierCodingKey: "type")
+    //@PolymorphicEnumCodable(identifierCodingKey: "type")
     public enum Part {
         case text(ChatMessage.TextPart)
         case reasoning(ChatMessage.ReasoningPart)
@@ -95,5 +95,50 @@ public struct ChatMessage: Codable, Identifiable {
     @PolymorphicCodable(identifier: "step-start") @MemberwiseInit(.public)
     public struct StepStartPart {
         public let type = "step-start"
+    }
+}
+
+extension ChatMessage.Part: Codable {
+    enum PolymorphicMetaCodingKey: CodingKey {
+        case `type`
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: PolymorphicMetaCodingKey.self)
+        let type = try container.decode(String.self, forKey: PolymorphicMetaCodingKey.type)
+
+        switch type {
+        case ChatMessage.TextPart.polymorphicIdentifier:
+            self = .text(try ChatMessage.TextPart(from: decoder))
+        case ChatMessage.ReasoningPart.polymorphicIdentifier:
+            self = .reasoning(try ChatMessage.ReasoningPart(from: decoder))
+        case ChatMessage.ToolInvocationPart.polymorphicIdentifier:
+            self = .toolInvocation(try ChatMessage.ToolInvocationPart(from: decoder))
+        case ChatMessage.SourcePart.polymorphicIdentifier:
+            self = .source(try ChatMessage.SourcePart(from: decoder))
+        case ChatMessage.FilePart.polymorphicIdentifier:
+            self = .file(try ChatMessage.FilePart(from: decoder))
+        case ChatMessage.StepStartPart.polymorphicIdentifier:
+            self = .stepStart(try ChatMessage.StepStartPart(from: decoder))
+        default:
+            throw PolymorphicCodableError.unableToFindPolymorphicType(type)
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        switch self {
+        case .text(let value):
+            try value.encode(to: encoder)
+        case .reasoning(let value):
+            try value.encode(to: encoder)
+        case .toolInvocation(let value):
+            try value.encode(to: encoder)
+        case .source(let value):
+            try value.encode(to: encoder)
+        case .file(let value):
+            try value.encode(to: encoder)
+        case .stepStart(let value):
+            try value.encode(to: encoder)
+        }
     }
 }
