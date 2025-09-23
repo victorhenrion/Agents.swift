@@ -14,7 +14,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     private var rpcTasks: [String: AnyRPCTask] = [:]
     public private(set) var messages: [ChatMessage] = []
 
-    public init(instanceURL: URL, options: AgentClientOptions<State>) async {
+    public init(instanceURL: URL, options: AgentClientOptions<State>) {
         self.instanceURL = instanceURL
         self.options = options
 
@@ -23,16 +23,10 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         )
         ws.delegate = self
 
-        do {
-            try await loadInitialMessages()
-        } catch {
-            print("Failed to load initial messages: \(error)")
-        }
-
         ws.connect()
     }
 
-    func loadInitialMessages() async throws {
+    public func loadInitialMessages() async throws {
         let url = self.instanceURL.appending(path: "get-messages")
 
         var request = URLRequest(url: url)
