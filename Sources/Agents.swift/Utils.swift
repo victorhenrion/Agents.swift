@@ -41,30 +41,3 @@ extension JSONEncoder.DateEncodingStrategy {
         try container.encode($0.formatted(.iso8601withFractionalSeconds))
     }
 }
-
-// MARK: - camelCaseToKebabCase
-
-func camelCaseToKebabCase(_ str: String) -> String {
-    // If string is all uppercase, convert to lowercase
-    if str == str.uppercased() && str != str.lowercased() {
-        return str.lowercased().replacingOccurrences(of: "_", with: "-")
-    }
-    // Otherwise handle camelCase to kebab-case
-    return
-        str
-        .replacingOccurrences(of: "[A-Z]", with: "-$0", options: .regularExpression)
-        .deletingPrefix("-")
-        .replacingOccurrences(of: "_", with: "-")
-        .deletingSuffix("-")
-}
-
-extension String {
-    fileprivate func deletingPrefix(_ prefix: String) -> String {
-        guard self.hasPrefix(prefix) else { return self }
-        return String(self.dropFirst(prefix.count))
-    }
-    fileprivate func deletingSuffix(_ suffix: String) -> String {
-        guard self.hasSuffix(suffix) else { return self }
-        return String(self.dropLast(suffix.count))
-    }
-}

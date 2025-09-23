@@ -14,18 +14,9 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     private var rpcTasks: [String: AnyRPCTask] = [:]
     public private(set) var messages: [ChatMessage] = []
 
-    public init(
-        baseURL: URL,
-        agentNamespace: String,
-        instanceName: String,
-        options: AgentClientOptions<State>
-    ) async {
+    public init(instanceURL: URL, options: AgentClientOptions<State>) async {
+        self.instanceURL = instanceURL
         self.options = options
-
-        self.instanceURL =
-            baseURL
-            .appending(path: camelCaseToKebabCase(agentNamespace))
-            .appending(path: instanceName)
 
         self.ws = WebSocketTaskConnection(
             url: instanceURL, headers: options.headers, messageFormat: .text
