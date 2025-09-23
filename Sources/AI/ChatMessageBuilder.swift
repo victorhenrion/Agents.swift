@@ -41,7 +41,7 @@ package struct ChatMessageBuilder {
         var parts: [ChatMessage.Part] = []
         if hasStepStart { parts.append(.stepStart(ChatMessage.StepStartPart())) }
         if !reasoningBuffer.isEmpty {
-            parts.append(.reasoning(ChatMessage.ReasoningPart(reasoning: reasoningBuffer)))
+            parts.append(.reasoning(ChatMessage.ReasoningPart(text: reasoningBuffer)))
         }
         if !textBuffer.isEmpty { parts.append(.text(ChatMessage.TextPart(text: textBuffer))) }
         parts.append(

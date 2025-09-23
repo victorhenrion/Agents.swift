@@ -104,7 +104,9 @@ package enum ChatMessageStreamFrame {
                 return .reasoning(ReasoningFrame(text: s))
             }
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let txt = (obj["reasoning"] as? String) ?? (obj["data"] as? String)
+                let txt = (obj["text"] as? String)
+                    ?? (obj["reasoning"] as? String)
+                    ?? (obj["data"] as? String)
             {
                 return .reasoning(ReasoningFrame(text: txt))
             }

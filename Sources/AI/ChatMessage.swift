@@ -43,7 +43,7 @@ public struct ChatMessage: Codable, Identifiable {
     @PolymorphicCodable(identifier: "reasoning") @MemberwiseInit(.public)
     public struct ReasoningPart {
         public let type = "reasoning"
-        public let reasoning: String
+        public let text: String
     }
 
     @PolymorphicCodable(identifier: "tool-invocation") @MemberwiseInit(.public)
