@@ -7,7 +7,7 @@ public struct ChatMessage: Codable, Identifiable {
     public let id: String  //                               id: string
     public let createdAt: Date?  //                         createdAt?: Date
     public let experimental_attachments: [Attachment]?  //  experimental_attachments?: Attachment[]
-    public let role: Role  //                               role: 'system' | 'user' | 'assistant' | 'data'
+    public let role: Role  //                               role: 'system' | 'user' | 'assistant'
     public let annotations: [AnyCodable]?  //               annotations?: JSONValue[] | undefined
     public let parts: [Part]  //                            parts?: Array<TextUIPart | ReasoningUIPart | ToolInvocationUIPart | SourceUIPart | FileUIPart | StepStartUIPart>;
 
@@ -22,7 +22,6 @@ public struct ChatMessage: Codable, Identifiable {
         case system
         case user
         case assistant
-        case data
     }
 
     //@PolymorphicEnumCodable(identifierCodingKey: "type")
