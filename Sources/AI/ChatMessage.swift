@@ -6,7 +6,6 @@ import MemberwiseInit
 public struct ChatMessage: Codable, Identifiable {
     public let id: String  //                               id: string
     public let createdAt: Date?  //                         createdAt?: Date
-    //public let content: String
     public let experimental_attachments: [Attachment]?  //  experimental_attachments?: Attachment[]
     public let role: Role  //                               role: 'system' | 'user' | 'assistant' | 'data'
     public let annotations: [AnyCodable]?  //               annotations?: JSONValue[] | undefined
