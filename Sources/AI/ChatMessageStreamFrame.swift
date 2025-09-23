@@ -28,23 +28,23 @@ package enum ChatMessageStreamFrame {
     package struct ToolCallStartFrame: Codable {
         let toolCallId: String
         let toolName: String?
-        let args: AnyCodable?
+        let input: AnyCodable?
     }
 
     package struct ToolCallDeltaFrame: Codable {
         let toolCallId: String
-        let argsDelta: AnyCodable?
+        let inputDelta: AnyCodable?
     }
 
     package struct ToolCallFrame: Codable {
         let toolCallId: String
         let toolName: String
-        let args: AnyCodable
+        let input: AnyCodable
     }
 
     package struct ToolResultFrame: Codable {
         let toolCallId: String
-        let result: AnyCodable
+        let output: AnyCodable
     }
 
     package struct FinishFrame: Codable {

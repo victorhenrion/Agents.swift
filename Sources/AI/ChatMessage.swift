@@ -57,8 +57,8 @@ public struct ChatMessage: Codable, Identifiable {
         public let state: State
         public let toolCallId: String
         public let toolName: String
-        public let args: AnyCodable?  // can be anything (not just array or object)
-        public let result: AnyCodable?  // can be anything
+        public let input: AnyCodable?  // can be anything (not just array or object)
+        public let output: AnyCodable?  // can be anything
         public let step: Int?
 
         public enum State: String, Codable {

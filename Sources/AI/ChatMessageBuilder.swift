@@ -51,8 +51,8 @@ package struct ChatMessageBuilder {
                     state: s.state,
                     toolCallId: s.toolCallId,
                     toolName: s.toolName,
-                    args: s.args ?? AnyCodable(nil as Any?),
-                    result: s.result,
+                    input: s.input ?? AnyCodable(nil as Any?),
+                    output: s.output,
                     step: nil
                 )
                 return .toolInvocation(ChatMessage.ToolInvocationPart(toolInvocation: inv))
@@ -114,7 +114,7 @@ package struct ChatMessageBuilder {
         ensureStepStarted()
         upsertTool(t.toolCallId) { acc in
             if let name = t.toolName { acc.toolName = name }
-            if let args = t.args { acc.args = args }
+            if let input = t.input { acc.input = input }
             acc.state = .partialCall
         }
     }
@@ -122,7 +122,7 @@ package struct ChatMessageBuilder {
     private mutating func handleToolDelta(_ d: ChatMessageStreamFrame.ToolCallDeltaFrame) {
         ensureStepStarted()
         upsertTool(d.toolCallId) { acc in
-            if let delta = d.argsDelta { acc.args = delta }
+            if let delta = d.inputDelta { acc.input = delta }
             acc.state = .partialCall
         }
     }
@@ -131,14 +131,14 @@ package struct ChatMessageBuilder {
         ensureStepStarted()
         upsertTool(t.toolCallId) { acc in
             acc.toolName = t.toolName
-            acc.args = t.args
+            acc.input = t.input
             acc.state = .call
         }
     }
 
     private mutating func handleToolResult(_ r: ChatMessageStreamFrame.ToolResultFrame) {
         upsertTool(r.toolCallId) { acc in
-            acc.result = r.result
+            acc.output = r.output
             acc.state = .result
         }
     }
@@ -151,8 +151,8 @@ package struct ChatMessageBuilder {
             ?? PendingToolInvocation(
                 toolCallId: id,
                 toolName: "",
-                args: nil,
-                result: nil,
+                input: nil,
+                output: nil,
                 state: .partialCall
             )
         apply(&acc)
@@ -163,8 +163,8 @@ package struct ChatMessageBuilder {
     private struct PendingToolInvocation {
         var toolCallId: String
         var toolName: String
-        var args: AnyCodable?
-        var result: AnyCodable?
+        var input: AnyCodable?
+        var output: AnyCodable?
         var state: ChatMessage.ToolInvocation.State
     }
 }

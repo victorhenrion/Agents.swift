@@ -200,7 +200,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 
     public func addToolResult(
         toolCallId: String,
-        result: AnyCodable?
+        output: AnyCodable?
     ) async throws -> ChatMessage {
         guard let lastMsg = messages.last else {
             throw AgentError.toolCallNotFound(id: toolCallId, "No messages")
@@ -219,8 +219,8 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                             state: .result,
                             toolCallId: prev.toolCallId,
                             toolName: prev.toolName,
-                            args: prev.args,
-                            result: result,
+                            input: prev.input,
+                            output: output,
                             step: prev.step,
                         )
                     )
