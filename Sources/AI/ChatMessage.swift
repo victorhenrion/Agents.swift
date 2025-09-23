@@ -24,11 +24,10 @@ public struct ChatMessage: Codable, Identifiable {
         case assistant
     }
 
-    //@PolymorphicEnumCodable(identifierCodingKey: "type")
     public enum Part {
         case text(ChatMessage.TextPart)
         case reasoning(ChatMessage.ReasoningPart)
-        case toolInvocation(ChatMessage.ToolInvocationPart)
+        case tool(ChatMessage.ToolPart)
         case source(ChatMessage.SourcePart)
         case file(ChatMessage.FilePart)
         case stepStart(ChatMessage.StepStartPart)
@@ -46,25 +45,54 @@ public struct ChatMessage: Codable, Identifiable {
         public let text: String
     }
 
-    @PolymorphicCodable(identifier: "tool-invocation") @MemberwiseInit(.public)
-    public struct ToolInvocationPart {
-        public let type = "tool-invocation"
-        public let toolInvocation: ToolInvocation
-    }
+    @PolymorphicEnumCodable(identifierCodingKey: "state")
+    public enum ToolPart {
+        case inputStreaming(InputStreamingState)
+        case inputAvailable(InputAvailableState)
+        case outputAvailable(OutputAvailableState)
+        case outputError(OutputErrorState)
 
-    @MemberwiseInit(.public)
-    public struct ToolInvocation: Codable {
-        public let state: State
-        public let toolCallId: String
-        public let toolName: String
-        public let input: AnyCodable?  // can be anything (not just array or object)
-        public let output: AnyCodable?  // can be anything
-        public let step: Int?
+        @PolymorphicCodable(identifier: "input-streaming") @MemberwiseInit(.public)
+        public struct InputStreamingState: Codable {
+            public let state = "input-streaming"
+            public let toolCallId: String
+            public let providerExecuted: Bool?
 
-        public enum State: String, Codable {
-            case partialCall
-            case call
-            case result
+            public let input: AnyCodable?
+        }
+
+        @PolymorphicCodable(identifier: "input-available") @MemberwiseInit(.public)
+        public struct InputAvailableState: Codable {
+            public let state = "input-available"
+            public let toolCallId: String
+            public let providerExecuted: Bool?
+
+            public let input: AnyCodable
+            public let callProviderMetadata: [String: [String: AnyCodable]]?
+        }
+
+        @PolymorphicCodable(identifier: "output-available") @MemberwiseInit(.public)
+        public struct OutputAvailableState: Codable {
+            public let state = "output-available"
+            public let toolCallId: String
+            public let providerExecuted: Bool?
+
+            public let input: AnyCodable
+            public let callProviderMetadata: [String: [String: AnyCodable]]?
+            public let output: AnyCodable?
+            public let preliminary: Bool?
+        }
+
+        @PolymorphicCodable(identifier: "output-error") @MemberwiseInit(.public)
+        public struct OutputErrorState: Codable {
+            public let state = "output-error"
+            public let toolCallId: String
+            public let providerExecuted: Bool?
+
+            public let input: AnyCodable?
+            public let callProviderMetadata: [String: [String: AnyCodable]]?
+            public let rawInput: AnyCodable?
+            public let errorText: String
         }
     }
 
@@ -72,15 +100,15 @@ public struct ChatMessage: Codable, Identifiable {
     public struct SourcePart {
         public let type = "source"
         public let source: Source
-    }
 
-    @MemberwiseInit(.public)
-    public struct Source: Codable {
-        public let sourceType: String
-        public let id: String
-        public let url: String
-        public let title: String?
-        public let providerMetadata: [String: [String: AnyCodable]]?
+        @MemberwiseInit(.public)
+        public struct Source: Codable {
+            public let sourceType: String
+            public let id: String
+            public let url: String
+            public let title: String?
+            public let providerMetadata: [String: [String: AnyCodable]]?
+        }
     }
 
     @PolymorphicCodable(identifier: "file") @MemberwiseInit(.public)
@@ -109,8 +137,6 @@ extension ChatMessage.Part: Codable {
             self = .text(try ChatMessage.TextPart(from: decoder))
         case ChatMessage.ReasoningPart.polymorphicIdentifier:
             self = .reasoning(try ChatMessage.ReasoningPart(from: decoder))
-        case ChatMessage.ToolInvocationPart.polymorphicIdentifier:
-            self = .toolInvocation(try ChatMessage.ToolInvocationPart(from: decoder))
         case ChatMessage.SourcePart.polymorphicIdentifier:
             self = .source(try ChatMessage.SourcePart(from: decoder))
         case ChatMessage.FilePart.polymorphicIdentifier:
@@ -118,7 +144,11 @@ extension ChatMessage.Part: Codable {
         case ChatMessage.StepStartPart.polymorphicIdentifier:
             self = .stepStart(try ChatMessage.StepStartPart(from: decoder))
         default:
-            throw PolymorphicCodableError.unableToFindPolymorphicType(type)
+            if type.hasPrefix("tool-") {
+                self = .tool(try ChatMessage.ToolPart(from: decoder))
+            } else {
+                throw PolymorphicCodableError.unableToFindPolymorphicType(type)
+            }
         }
     }
 
@@ -128,7 +158,7 @@ extension ChatMessage.Part: Codable {
             try value.encode(to: encoder)
         case .reasoning(let value):
             try value.encode(to: encoder)
-        case .toolInvocation(let value):
+        case .tool(let value):
             try value.encode(to: encoder)
         case .source(let value):
             try value.encode(to: encoder)
