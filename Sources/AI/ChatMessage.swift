@@ -86,8 +86,7 @@ public struct ChatMessage: Codable, Identifiable {
     @PolymorphicCodable(identifier: "file") @MemberwiseInit(.public)
     public struct FilePart {
         public let type = "file"
-        public let mimeType: String
-        public let data: String
+        public let url: String
     }
 
     @PolymorphicCodable(identifier: "step-start") @MemberwiseInit(.public)
