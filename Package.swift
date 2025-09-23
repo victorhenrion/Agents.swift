@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Agents",
+    name: "Agents.swift",
 
     platforms: [
         .iOS(.v17),
@@ -15,10 +15,8 @@ let package = Package(
     ],
 
     products: [
-        .library(
-            name: "Agents",
-            targets: ["Agents"]
-        )
+        .library(name: "AI", targets: ["AI"]),
+        .library(name: "Agents", targets: ["Agents"]),
     ],
 
     dependencies: [
@@ -28,11 +26,24 @@ let package = Package(
 
     targets: [
         .target(
-            name: "Agents",
+            name: "ISO8601JSON",
+        ),
+        .target(
+            name: "AI",
             dependencies: [
+                "ISO8601JSON",
                 .product(name: "KarrotCodableKit", package: "KarrotCodableKit"),
                 .product(name: "MemberwiseInit", package: "swift-memberwise-init-macro"),
             ]
-        )
+        ),
+        .target(
+            name: "Agents",
+            dependencies: [
+                "AI",
+                "ISO8601JSON",
+                .product(name: "KarrotCodableKit", package: "KarrotCodableKit"),
+                .product(name: "MemberwiseInit", package: "swift-memberwise-init-macro"),
+            ]
+        ),
     ],
 )

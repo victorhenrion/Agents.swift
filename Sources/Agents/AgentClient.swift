@@ -1,4 +1,6 @@
+import AI
 import Foundation
+import ISO8601JSON
 import KarrotCodableKit
 import MemberwiseInit
 
@@ -327,3 +329,15 @@ public enum AgentError: Error {
     case rpcError(id: String, error: String?)
     case rpcResultMismatch(type: Decodable.Type)
 }
+
+private let jsonDecoder = {
+    let dec = JSONDecoder()
+    dec.dateDecodingStrategy = .iso8601withOptionalFractionalSeconds
+    return dec
+}()
+
+private let jsonEncoder = {
+    let enc = JSONEncoder()
+    enc.dateEncodingStrategy = .iso8601withFractionalSeconds
+    return enc
+}()

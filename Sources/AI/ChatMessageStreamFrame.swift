@@ -1,7 +1,8 @@
 import Foundation
+import ISO8601JSON
 import KarrotCodableKit
 
-enum ChatMessageStreamFrame {
+package enum ChatMessageStreamFrame {
     case start(StartFrame)  // "f:{...}"
     case text(String)  // "0:\"...\""
     case reasoning(ReasoningFrame)  // "g:..." or "i:{...}"
@@ -15,38 +16,38 @@ enum ChatMessageStreamFrame {
     case error(String)  // "3:..."
     case unknown(String)  // client-only
 
-    struct StartFrame: Codable {
+    package struct StartFrame: Codable {
         let messageId: String?
         let createdAt: Date?
     }
 
-    struct ReasoningFrame: Codable {
+    package struct ReasoningFrame: Codable {
         let text: String
     }
 
-    struct ToolCallStartFrame: Codable {
+    package struct ToolCallStartFrame: Codable {
         let toolCallId: String
         let toolName: String?
         let args: AnyCodable?
     }
 
-    struct ToolCallDeltaFrame: Codable {
+    package struct ToolCallDeltaFrame: Codable {
         let toolCallId: String
         let argsDelta: AnyCodable?
     }
 
-    struct ToolCallFrame: Codable {
+    package struct ToolCallFrame: Codable {
         let toolCallId: String
         let toolName: String
         let args: AnyCodable
     }
 
-    struct ToolResultFrame: Codable {
+    package struct ToolResultFrame: Codable {
         let toolCallId: String
         let result: AnyCodable
     }
 
-    struct FinishFrame: Codable {
+    package struct FinishFrame: Codable {
         let finishReason: String?
         let isContinued: Bool?
         let usage: Usage?
@@ -57,12 +58,12 @@ enum ChatMessageStreamFrame {
         }
     }
 
-    struct DataDoneFrame: Codable {
+    package struct DataDoneFrame: Codable {
         let finishReason: String?
         let usage: FinishFrame.Usage?
     }
 
-    static func parseAll(from raw: String) -> [ChatMessageStreamFrame] {
+    package static func parseAll(from raw: String) -> [ChatMessageStreamFrame] {
         if raw.isEmpty { return [] }
         return raw.split(separator: "\n").compactMap {
             let line = String($0)
@@ -123,3 +124,9 @@ enum ChatMessageStreamFrame {
         return nil
     }
 }
+
+private let jsonDecoder = {
+    let dec = JSONDecoder()
+    dec.dateDecodingStrategy = .iso8601withOptionalFractionalSeconds
+    return dec
+}()

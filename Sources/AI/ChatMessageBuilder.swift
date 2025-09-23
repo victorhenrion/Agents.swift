@@ -1,7 +1,7 @@
 import Foundation
 import KarrotCodableKit
 
-struct ChatMessageBuilder {
+package struct ChatMessageBuilder {
     private(set) var assistantMessageId: String?
     private var createdAt: Date = Date()
     private var textBuffer: String = ""
@@ -14,11 +14,13 @@ struct ChatMessageBuilder {
     private var dataDone: ChatMessageStreamFrame.DataDoneFrame?
     private var lastError: String?
 
-    mutating func apply(frames: [ChatMessageStreamFrame]) {
+    package init() {}
+
+    package mutating func apply(frames: [ChatMessageStreamFrame]) {
         for f in frames { apply(frame: f) }
     }
 
-    mutating func apply(frame: ChatMessageStreamFrame) {
+    package mutating func apply(frame: ChatMessageStreamFrame) {
         switch frame {
         case .start(let s): handleStart(s)
         case .text(let t): handleText(t)
@@ -35,7 +37,7 @@ struct ChatMessageBuilder {
         }
     }
 
-    func snapshot() -> ChatMessage {
+    package func snapshot() -> ChatMessage {
         var parts: [ChatMessage.Part] = []
         if hasStepStart { parts.append(.stepStart(ChatMessage.StepStartPart())) }
         if !reasoningBuffer.isEmpty {
