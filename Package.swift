@@ -20,7 +20,7 @@ let package = Package(
     ],
 
     dependencies: [
-        .package(url: "https://github.com/daangn/KarrotCodableKit.git", from: "1.4.0"),
+        .package(url: "https://github.com/daangn/KarrotCodableKit.git", from: "1.6.0"),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.2.1"),
         .package(url: "https://github.com/gohanlon/swift-memberwise-init-macro.git", from: "0.5.2"),
     ],

@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/daangn/KarrotCodableKit.git",
       "state" : {
-        "revision" : "35692d880982ba610b38ecf794fe1b8e1cef5b44",
-        "version" : "1.4.0"
+        "revision" : "c82af3c5aa39d67d50a698eaed0171107223be4d",
+        "version" : "1.6.0"
       }
     },
     {
