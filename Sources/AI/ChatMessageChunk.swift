@@ -1,4 +1,5 @@
 import Foundation
+import ISO8601JSON
 import KarrotCodableKit
 
 @PolymorphicEnumCodable(identifierCodingKey: "type")
@@ -205,3 +206,25 @@ package enum ChatMessageChunk {
 
     package typealias ProviderMetadata = [String: [String: AnyCodable]]
 }
+
+extension ChatMessageChunk {
+    package static func parseAll(from raw: String) -> [ChatMessageChunk] {
+        var chunks: [ChatMessageChunk] = []
+        for line in raw.split(separator: "\n") {
+            if let data = String(line).data(using: .utf8),
+                let chunk = try? jsonDecoder.decode(ChatMessageChunk.self, from: data)
+            {
+                chunks.append(chunk)
+            } else {
+                print("Failed to parse chunk: \(line)")
+            }
+        }
+        return chunks
+    }
+}
+
+private let jsonDecoder = {
+    let dec = JSONDecoder()
+    dec.dateDecodingStrategy = .iso8601withOptionalFractionalSeconds
+    return dec
+}()

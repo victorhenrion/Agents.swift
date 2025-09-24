@@ -82,9 +82,9 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                 guard var task = chatTasks[msg.id] else {
                     return
                 }
-                // Apply frames into the builder
-                for frame in ChatMessageStreamFrame.parseAll(from: msg.body) {
-                    task.builder.apply(frame: frame)
+                // Apply chunks into the builder
+                for chunk in ChatMessageChunk.parseAll(from: msg.body) {
+                    task.builder.apply(chunk: chunk)
                 }
                 // Persist updated builder state
                 chatTasks[msg.id] = task

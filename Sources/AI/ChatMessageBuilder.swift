@@ -1,21 +1,11 @@
 import Foundation
 import KarrotCodableKit
+import OrderedCollections
 
 package struct ChatMessageBuilder {
     private var messageId: String?
     private var messageMetadata: AnyCodable?
-    private var parts: [String: ChatMessage.Part] = [:]
-
-    private var createdAt: Date = Date()
-    private var textBuffer: String = ""
-    private var reasoningBuffer: String = ""
-    private var sources: [ChatMessage.Source] = []
-    private var toolStates: [String: PendingToolInvocation] = [:]
-    private var toolOrder: [String] = []
-    private var hasStepStart: Bool = false
-    private var finish: ChatMessageChunk.FinishFrame?
-    private var dataDone: ChatMessageChunk.DataDoneFrame?
-    private var lastError: String?
+    private var parts = OrderedDictionary<String, ChatMessage.Part>()
 
     package init() {}
 
@@ -61,27 +51,34 @@ package struct ChatMessageBuilder {
                     mediaType: c.mediatype, filename: nil,
                     url: c.url, providerMetadata: nil))
         case .data(let c):
-            break
+            parts[UUID().uuidString] = .data(.init(type: c.type, id: c.id, data: c.data))
         case .error(let c):
             break
-        case .startStep(let c):
+        case .startStep(_):
             parts[UUID().uuidString] = .stepStart(.init())
-        case .finishStep(let c):
+        case .finishStep(_):
             parts[UUID().uuidString] = .stepStart(.init())
         case .start(let c):
             messageId = c.messageId
             messageMetadata = c.messageMetadata
         case .finish(let c):
             messageMetadata = c.messageMetadata
-        case .abort(let f):
+        case .abort(_):
             break
-        case .messageMetadata(let f):
-            messageMetadata = f.messageMetadata
+        case .messageMetadata(let m):
+            messageMetadata = m.messageMetadata
         }
     }
 
     package func snapshot() -> ChatMessage {
-
+        return ChatMessage(
+            id: messageId ?? UUID().uuidString,
+            createdAt: Date(),
+            experimental_attachments: [],
+            role: .assistant,
+            annotations: messageMetadata.map { [$0] } ?? [],
+            parts: parts.values.elements
+        )
     }
 
     private mutating func updateTextPart(
@@ -108,7 +105,6 @@ package struct ChatMessageBuilder {
         updater(&state)
         parts[id] = .tool(.inputStreaming(state))
     }
-
 }
 
 extension ChatMessage.TextPart {
