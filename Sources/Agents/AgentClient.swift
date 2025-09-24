@@ -200,7 +200,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         }
     }
 
-    public func addToolResult(
+    public func addToolOutput(
         toolCallId: String,
         output: AnyCodable?
     ) async throws -> ChatMessage {
