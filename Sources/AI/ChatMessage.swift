@@ -16,16 +16,7 @@ public struct ChatMessage: Codable, Identifiable {
         case assistant
     }
 
-    public enum Part {
-        case text(ChatMessage.TextPart)
-        case reasoning(ChatMessage.ReasoningPart)
-        case tool(ChatMessage.ToolPart)
-        case sourceURL(ChatMessage.SourceURLPart)
-        case sourceDocument(ChatMessage.SourceDocumentPart)
-        case file(ChatMessage.FilePart)
-        case data(ChatMessage.DataPart)
-        case stepStart(ChatMessage.StepStartPart)
-    }
+    public typealias Part = MessagePart
 
     @PolymorphicCodable(identifier: "text") @MemberwiseInit(.public)
     public struct TextPart {
@@ -53,7 +44,27 @@ public struct ChatMessage: Codable, Identifiable {
         }
     }
 
-    public typealias ToolPart = _ToolPart
+    @PolymorphicCodable(identifier: "tool") @MemberwiseInit(.public)
+    public struct ToolPart {
+        public let type = "tool"
+        public let toolName: String
+        public let toolCallId: String
+        public let providerExecuted: Bool?
+        public let state: State
+
+        public typealias State = ToolState
+    }
+
+    @PolymorphicCodable(identifier: "dynamic-tool") @MemberwiseInit(.public)
+    public struct DynamicToolPart {
+        public let type = "dynamic-tool"
+        public let toolName: String
+        public let toolCallId: String
+        public let providerExecuted: Bool?
+        public let state: State
+
+        public typealias State = ToolState
+    }
 
     @PolymorphicCodable(identifier: "source-url") @MemberwiseInit(.public)
     public struct SourceURLPart {
@@ -83,9 +94,10 @@ public struct ChatMessage: Codable, Identifiable {
         public let providerMetadata: ProviderMetadata?
     }
 
-    @MemberwiseInit(.public)
+    @PolymorphicCodable(identifier: "data") @MemberwiseInit(.public)
     public struct DataPart: Codable {
-        public let type: String  // data-{name}
+        public let type = "data"
+        public let dataType: String
         public let id: String?
         public let data: AnyCodable?
     }
@@ -98,63 +110,21 @@ public struct ChatMessage: Codable, Identifiable {
     public typealias ProviderMetadata = [String: [String: AnyCodable]]
 }
 
-extension ChatMessage.Part: Codable {
-    enum PolymorphicMetaCodingKey: CodingKey {
-        case `type`
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: PolymorphicMetaCodingKey.self)
-        let type = try container.decode(String.self, forKey: PolymorphicMetaCodingKey.type)
-
-        switch type {
-        case ChatMessage.TextPart.polymorphicIdentifier:
-            self = .text(try ChatMessage.TextPart(from: decoder))
-        case ChatMessage.ReasoningPart.polymorphicIdentifier:
-            self = .reasoning(try ChatMessage.ReasoningPart(from: decoder))
-        case ChatMessage.SourceURLPart.polymorphicIdentifier:
-            self = .sourceURL(try ChatMessage.SourceURLPart(from: decoder))
-        case ChatMessage.SourceDocumentPart.polymorphicIdentifier:
-            self = .sourceDocument(try ChatMessage.SourceDocumentPart(from: decoder))
-        case ChatMessage.FilePart.polymorphicIdentifier:
-            self = .file(try ChatMessage.FilePart(from: decoder))
-        case ChatMessage.StepStartPart.polymorphicIdentifier:
-            self = .stepStart(try ChatMessage.StepStartPart(from: decoder))
-        default:
-            if type.hasPrefix("tool-") || type == "dynamic-tool" {
-                self = .tool(try ChatMessage.ToolPart(from: decoder))
-            } else if type.hasPrefix("data-") {
-                self = .data(try ChatMessage.DataPart(from: decoder))
-            } else {
-                throw PolymorphicCodableError.unableToFindPolymorphicType(type)
-            }
-        }
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        switch self {
-        case .text(let value):
-            try value.encode(to: encoder)
-        case .reasoning(let value):
-            try value.encode(to: encoder)
-        case .tool(let value):
-            try value.encode(to: encoder)
-        case .sourceURL(let value):
-            try value.encode(to: encoder)
-        case .sourceDocument(let value):
-            try value.encode(to: encoder)
-        case .file(let value):
-            try value.encode(to: encoder)
-        case .data(let value):
-            try value.encode(to: encoder)
-        case .stepStart(let value):
-            try value.encode(to: encoder)
-        }
-    }
+@PolymorphicEnumCodable(identifierCodingKey: "type")
+public enum MessagePart {
+    case text(ChatMessage.TextPart)
+    case reasoning(ChatMessage.ReasoningPart)
+    case tool(ChatMessage.ToolPart)
+    case dynamicTool(ChatMessage.DynamicToolPart)
+    case sourceURL(ChatMessage.SourceURLPart)
+    case sourceDocument(ChatMessage.SourceDocumentPart)
+    case file(ChatMessage.FilePart)
+    case data(ChatMessage.DataPart)
+    case stepStart(ChatMessage.StepStartPart)
 }
 
 @PolymorphicEnumCodable(identifierCodingKey: "state")
-public enum _ToolPart {
+public enum ToolState {
     case inputStreaming(InputStreamingState)
     case inputAvailable(InputAvailableState)
     case outputAvailable(OutputAvailableState)
@@ -162,32 +132,17 @@ public enum _ToolPart {
 
     @PolymorphicCodable(identifier: "input-streaming") @MemberwiseInit(.public)
     public struct InputStreamingState {
-        public let type: String  // tool-{name} or dynamic-tool
-        public let state = "input-streaming"
-        public let toolCallId: String
-        public let providerExecuted: Bool?
-
         public var input: AnyCodable?
     }
 
     @PolymorphicCodable(identifier: "input-available") @MemberwiseInit(.public)
     public struct InputAvailableState {
-        public let type: String  // tool-{name} or dynamic-tool
-        public let state = "input-available"
-        public let toolCallId: String
-        public let providerExecuted: Bool?
-
         public let input: AnyCodable
         public let callProviderMetadata: ChatMessage.ProviderMetadata?
     }
 
     @PolymorphicCodable(identifier: "output-available") @MemberwiseInit(.public)
     public struct OutputAvailableState {
-        public let type: String  // tool-{name} or dynamic-tool
-        public let state = "output-available"
-        public let toolCallId: String
-        public let providerExecuted: Bool?
-
         public let input: AnyCodable
         public let callProviderMetadata: ChatMessage.ProviderMetadata?
         public let output: AnyCodable?
@@ -196,11 +151,6 @@ public enum _ToolPart {
 
     @PolymorphicCodable(identifier: "output-error") @MemberwiseInit(.public)
     public struct OutputErrorState {
-        public let type: String  // tool-{name} or dynamic-tool
-        public let state = "output-error"
-        public let toolCallId: String
-        public let providerExecuted: Bool?
-
         public let input: AnyCodable?
         public let callProviderMetadata: ChatMessage.ProviderMetadata?
         public let rawInput: AnyCodable?
