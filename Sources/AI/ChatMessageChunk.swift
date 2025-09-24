@@ -2,7 +2,7 @@ import Foundation
 import ISO8601JSON
 import KarrotCodableKit
 
-@PolymorphicEnumCodable(identifierCodingKey: "type")
+@PolymorphicEnumCodable(identifierCodingKey: "type", fallbackCaseName: "data")
 package enum ChatMessageChunk {
     case textStart(TextStart)
     case textDelta(TextDelta)
@@ -162,9 +162,9 @@ package enum ChatMessageChunk {
         let mediatype: String
     }
 
-    @PolymorphicCodable(identifier: "data-{name}")
-    package struct Data {
-        let type = "data-{name}"
+    // this is our fallback type, if chunk doesn't conform to it, it will throw (good)
+    package struct Data: Codable {
+        let type: String  // "data-{name}"
         let id: String?
         let data: AnyCodable
         let transient: Bool?

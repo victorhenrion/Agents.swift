@@ -45,13 +45,15 @@ package struct ChatMessageBuilder {
                 .init(
                     sourceId: c.sourceId, mediaType: c.mediatype, title: c.title,
                     filename: c.filename, providerMetadata: c.providerMetadata))
-        case .file(let c):  // TS types are probably wrong
+        case .file(let c):  // TS types are probably wrong (nil filename?)
             parts[UUID().uuidString] = .file(
                 .init(
                     mediaType: c.mediatype, filename: nil,
                     url: c.url, providerMetadata: nil))
         case .data(let c):
-            parts[UUID().uuidString] = .data(.init(type: c.type, id: c.id, data: c.data))
+            parts[UUID().uuidString] = .data(
+                .init(
+                    dataType: c.type.deletingPrefix("data-"), id: c.id, data: c.data))
         case .error(let c):
             break  // TODO: handle this
         case .startStep(_):
@@ -168,5 +170,12 @@ extension ChatMessage.ToolPart {
     mutating func apply(_ chunk: ChatMessageChunk.ToolOutputError) {
         providerExecuted = chunk.providerExecuted
         state = .outputError(.init(errorText: chunk.errorText))
+    }
+}
+
+extension String {
+    fileprivate func deletingPrefix(_ prefix: String) -> String {
+        guard self.hasPrefix(prefix) else { return self }
+        return String(self.dropFirst(prefix.count))
     }
 }
