@@ -4,11 +4,9 @@ import MemberwiseInit
 
 @MemberwiseInit(.public)
 public struct ChatMessage: Codable, Identifiable {
-    public let id: String  //                               id: string
-    public let createdAt: Date?  //                         createdAt?: Date
-    public let role: Role  //                               role: 'system' | 'user' | 'assistant'
-    public let annotations: [AnyCodable]?  //               annotations?: JSONValue[] | undefined
-    public let parts: [Part]  //                            parts?: Array<TextUIPart | ReasoningUIPart | ToolInvocationUIPart | SourceUIPart | FileUIPart | StepStartUIPart>;
+    public let id: String
+    public let role: Role
+    public let metadata: AnyCodable?
 
     public enum Role: String, Codable {
         case system
