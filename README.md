@@ -67,7 +67,6 @@ func helloWorld() async {
     let userMessage = ChatMessage(
         id: UUID().uuidString,
         createdAt: Date(),
-        experimental_attachments: [],
         role: .user,
         annotations: [],
         parts: [ .text(.init(text: "Hello, agent!")) ]

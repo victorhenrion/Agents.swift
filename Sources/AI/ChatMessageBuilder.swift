@@ -74,7 +74,6 @@ package struct ChatMessageBuilder {
         return ChatMessage(
             id: messageId ?? UUID().uuidString,
             createdAt: Date(),
-            experimental_attachments: [],
             role: .assistant,
             annotations: messageMetadata.map { [$0] } ?? [],
             parts: parts.values.elements

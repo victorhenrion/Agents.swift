@@ -244,7 +244,6 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         let updatedMsg = ChatMessage(
             id: lastMsg.id,
             createdAt: lastMsg.createdAt,
-            experimental_attachments: lastMsg.experimental_attachments,
             role: lastMsg.role,
             annotations: lastMsg.annotations,
             parts: updatedParts
