@@ -2,7 +2,7 @@ import Foundation
 import ISO8601JSON
 import KarrotCodableKit
 
-@PolymorphicEnumCodable(identifierCodingKey: "type", fallbackCaseName: "data")
+@PolymorphicEnumDecodable(identifierCodingKey: "type", fallbackCaseName: "data")
 package enum ChatMessageChunk {
     case textStart(TextStart)
     case textDelta(TextDelta)
@@ -28,59 +28,51 @@ package enum ChatMessageChunk {
     case abort(Abort)
     case messageMetadata(MessageMetadata)
 
-    @PolymorphicCodable(identifier: "text-start")
+    @PolymorphicDecodable(identifier: "text-start")
     package struct TextStart {
-        let type = "text-start"
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
-    @PolymorphicCodable(identifier: "text-delta")
+    @PolymorphicDecodable(identifier: "text-delta")
     package struct TextDelta {
-        let type = "text-delta"
         let delta: String
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
-    @PolymorphicCodable(identifier: "text-end")
+    @PolymorphicDecodable(identifier: "text-end")
     package struct TextEnd {
-        let type = "text-end"
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
-    @PolymorphicCodable(identifier: "reasoning-start")
+    @PolymorphicDecodable(identifier: "reasoning-start")
     package struct ReasoningStart {
-        let type = "reasoning-start"
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
-    @PolymorphicCodable(identifier: "reasoning-delta")
+    @PolymorphicDecodable(identifier: "reasoning-delta")
     package struct ReasoningDelta {
-        let type = "reasoning-delta"
         let id: String
         let delta: String
         let providerMetadata: ProviderMetadata?
     }
 
-    @PolymorphicCodable(identifier: "reasoning-end")
+    @PolymorphicDecodable(identifier: "reasoning-end")
     package struct ReasoningEnd {
-        let type = "reasoning-end"
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
-    @PolymorphicCodable(identifier: "error")
+    @PolymorphicDecodable(identifier: "error")
     package struct Error {
-        let type = "error"
         let errorText: String
     }
 
-    @PolymorphicCodable(identifier: "tool-input-available")
+    @PolymorphicDecodable(identifier: "tool-input-available")
     package struct ToolInputAvailable {
-        let type = "tool-input-available"
         let toolCallId: String
         let toolName: String
         let input: AnyCodable
@@ -89,9 +81,8 @@ package enum ChatMessageChunk {
         let dynamic: Bool?
     }
 
-    @PolymorphicCodable(identifier: "tool-input-error")
+    @PolymorphicDecodable(identifier: "tool-input-error")
     package struct ToolInputError {
-        let type = "tool-input-error"
         let toolCallId: String
         let toolName: String
         let input: AnyCodable?
@@ -101,9 +92,8 @@ package enum ChatMessageChunk {
         let errorText: String
     }
 
-    @PolymorphicCodable(identifier: "tool-output-available")
+    @PolymorphicDecodable(identifier: "tool-output-available")
     package struct ToolOutputAvailable {
-        let type = "tool-output-available"
         let toolCallId: String
         let output: AnyCodable
         let providerExecuted: Bool?
@@ -111,43 +101,38 @@ package enum ChatMessageChunk {
         let preliminary: Bool?
     }
 
-    @PolymorphicCodable(identifier: "tool-output-error")
+    @PolymorphicDecodable(identifier: "tool-output-error")
     package struct ToolOutputError {
-        let type = "tool-output-error"
         let toolCallId: String
         let errorText: String
         let providerExecuted: Bool?
         let dynamic: Bool?
     }
 
-    @PolymorphicCodable(identifier: "tool-input-start")
+    @PolymorphicDecodable(identifier: "tool-input-start")
     package struct ToolInputStart {
-        let type = "tool-input-start"
         let toolCallId: String
         let toolName: String
         let providerExecuted: Bool?
         let dynamic: Bool?
     }
 
-    @PolymorphicCodable(identifier: "tool-input-delta")
+    @PolymorphicDecodable(identifier: "tool-input-delta")
     package struct ToolInputDelta {
-        let type = "tool-input-delta"
         let toolCallId: String
         let inputTextDelta: String
     }
 
-    @PolymorphicCodable(identifier: "source-url")
+    @PolymorphicDecodable(identifier: "source-url")
     package struct SourceURL {
-        let type = "source-url"
         let sourceId: String
         let url: String
         let title: String?
         let providerMetadata: ProviderMetadata?
     }
 
-    @PolymorphicCodable(identifier: "source-document")
+    @PolymorphicDecodable(identifier: "source-document")
     package struct SourceDocument {
-        let type = "source-document"
         let sourceId: String
         let mediatype: String
         let title: String
@@ -155,52 +140,45 @@ package enum ChatMessageChunk {
         let providerMetadata: ProviderMetadata?
     }
 
-    @PolymorphicCodable(identifier: "file")
+    @PolymorphicDecodable(identifier: "file")
     package struct File {
-        let type = "file"
         let url: String
         let mediatype: String
     }
 
     // this is our fallback type, if chunk doesn't conform to it, it will throw (good)
-    package struct Data: Codable {
+    package struct Data: Decodable {
         let type: String  // "data-{name}"
         let id: String?
         let data: AnyCodable
         let transient: Bool?
     }
 
-    @PolymorphicCodable(identifier: "start-step")
+    @PolymorphicDecodable(identifier: "start-step")
     package struct StartStep {
-        let type = "start-step"
     }
 
-    @PolymorphicCodable(identifier: "finish-step")
+    @PolymorphicDecodable(identifier: "finish-step")
     package struct FinishStep {
-        let type = "finish-step"
     }
 
-    @PolymorphicCodable(identifier: "start")
+    @PolymorphicDecodable(identifier: "start")
     package struct Start {
-        let type = "start"
         let messageId: String?
         let messageMetadata: AnyCodable?
     }
 
-    @PolymorphicCodable(identifier: "finish")
+    @PolymorphicDecodable(identifier: "finish")
     package struct Finish {
-        let type = "finish"
         let messageMetadata: AnyCodable?
     }
 
-    @PolymorphicCodable(identifier: "abort")
+    @PolymorphicDecodable(identifier: "abort")
     package struct Abort {
-        let type = "abort"
     }
 
-    @PolymorphicCodable(identifier: "message-metadata")
+    @PolymorphicDecodable(identifier: "message-metadata")
     package struct MessageMetadata {
-        let type = "message-metadata"
         let messageMetadata: AnyCodable
     }
 
