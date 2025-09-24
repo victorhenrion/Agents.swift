@@ -24,17 +24,17 @@ package struct ChatMessageBuilder {
         case .reasoningEnd(let c):
             updateReasoningPart(c.id) { $0.apply(c) }
         case .toolInputStart(let c):
-            parts[c.toolCallId] = /*c.dynamic == true ? .dynamicTool(.init(c)) :*/ .tool(.init(c))
+            parts[c.toolCallId] = .tool(.init(c))
         case .toolInputDelta(let c):
             updateToolPart(c.toolCallId) { $0.apply(c) }
         case .toolInputAvailable(let c):
-            parts[c.toolCallId] = .tool(.inputAvailable(.init(c)))
+            parts[c.toolCallId] = .tool(.init(c))
         case .toolInputError(let c):
-            break
+            break  // TODO: handle this (not sure how the spec does it)
         case .toolOutputAvailable(let c):
-            break
+            updateToolPart(c.toolCallId) { $0.apply(c) }
         case .toolOutputError(let c):
-            break
+            updateToolPart(c.toolCallId) { $0.apply(c) }
         case .sourceURL(let c):
             parts[UUID().uuidString] = .sourceURL(
                 .init(
@@ -128,8 +128,8 @@ extension ChatMessage.ReasoningPart {
         providerMetadata = chunk.providerMetadata
     }
     mutating func apply(_ chunk: ChatMessageChunk.ReasoningEnd) {
-        state = .done
         providerMetadata = chunk.providerMetadata
+        state = .done
     }
 }
 
@@ -138,12 +138,34 @@ extension ChatMessage.ToolPart {
         self.init(
             toolName: chunk.toolName,
             toolCallId: chunk.toolCallId,
+            dynamic: chunk.dynamic == true,
             providerExecuted: chunk.providerExecuted,
-            state: .inputStreaming(.init(input: nil))
+            input: nil,
+            callProviderMetadata: nil,
+            state: .inputStreaming(.init())
         )
     }
     mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
         input = AnyCodable(input?.value as? String ?? "" + chunk.inputTextDelta)
+    }
+    init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
+        self.init(
+            toolName: chunk.toolName,
+            toolCallId: chunk.toolCallId,
+            dynamic: chunk.dynamic == true,
+            providerExecuted: chunk.providerExecuted,
+            input: chunk.input,
+            callProviderMetadata: chunk.providerMetadata,
+            state: .inputAvailable(.init())
+        )
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputAvailable) {
+        providerExecuted = chunk.providerExecuted
+        state = .outputAvailable(.init(output: chunk.output, preliminary: chunk.preliminary))
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputError) {
+        providerExecuted = chunk.providerExecuted
+        state = .outputError(.init(errorText: chunk.errorText))
     }
 }
 

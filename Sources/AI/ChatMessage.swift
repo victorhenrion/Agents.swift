@@ -48,7 +48,7 @@ public struct ChatMessage: Codable, Identifiable {
         public let toolName: String
         public let toolCallId: String
         public let dynamic: Bool
-        public let providerExecuted: Bool?
+        public var providerExecuted: Bool?
         public var input: AnyCodable?
         public var callProviderMetadata: ProviderMetadata?
         public var state: State
@@ -139,7 +139,6 @@ public enum ToolState {
     @PolymorphicCodable(identifier: "output-error") @MemberwiseInit(.public)
     public struct OutputErrorState {
         public let name = "output-error"
-        public let rawInput: AnyCodable?
         public let errorText: String
     }
 }
