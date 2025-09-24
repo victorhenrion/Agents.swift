@@ -28,6 +28,10 @@ public struct ChatMessage: Codable, Identifiable {
             case streaming
             case done
         }
+
+        public init(text: String) {
+            self.init(text: text, state: .done, providerMetadata: nil)
+        }
     }
 
     @PolymorphicCodable(identifier: "reasoning") @MemberwiseInit(.public)
@@ -40,6 +44,10 @@ public struct ChatMessage: Codable, Identifiable {
         public enum State: String, Codable {
             case streaming
             case done
+        }
+
+        public init(text: String) {
+            self.init(text: text, state: .done, providerMetadata: nil)
         }
     }
 
