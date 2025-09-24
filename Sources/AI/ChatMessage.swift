@@ -86,7 +86,7 @@ public struct ChatMessage: Codable, Identifiable {
     }
 
     @PolymorphicCodable(identifier: "data") @MemberwiseInit(.public)
-    public struct DataPart: Codable {
+    public struct DataPart {
         public let type = "data"
         public let dataType: String
         public let id: String?
