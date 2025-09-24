@@ -38,9 +38,9 @@ public struct ChatMessage: Codable, Identifiable {
     @PolymorphicCodable(identifier: "text") @MemberwiseInit(.public)
     public struct TextPart {
         public let type = "text"
-        public let text: String
-        public let state: State?
-        public let providerMetadata: ProviderMetadata?
+        public var text: String
+        public var state: State?
+        public var providerMetadata: ProviderMetadata?
 
         public enum State: String, Codable {
             case streaming
@@ -51,9 +51,9 @@ public struct ChatMessage: Codable, Identifiable {
     @PolymorphicCodable(identifier: "reasoning") @MemberwiseInit(.public)
     public struct ReasoningPart {
         public let type = "reasoning"
-        public let text: String
-        public let state: State?
-        public let providerMetadata: ProviderMetadata?
+        public var text: String
+        public var state: State?
+        public var providerMetadata: ProviderMetadata?
 
         public enum State: String, Codable {
             case streaming
@@ -70,17 +70,17 @@ public struct ChatMessage: Codable, Identifiable {
 
         @PolymorphicCodable(identifier: "input-streaming") @MemberwiseInit(.public)
         public struct InputStreamingState {
-            public let type: String  // tool-{name}
+            public let type: String  // tool-{name} or dynamic-tool
             public let state = "input-streaming"
             public let toolCallId: String
             public let providerExecuted: Bool?
 
-            public let input: AnyCodable?
+            public var input: AnyCodable?
         }
 
         @PolymorphicCodable(identifier: "input-available") @MemberwiseInit(.public)
         public struct InputAvailableState {
-            public let type: String  // tool-{name}
+            public let type: String  // tool-{name} or dynamic-tool
             public let state = "input-available"
             public let toolCallId: String
             public let providerExecuted: Bool?
@@ -91,7 +91,7 @@ public struct ChatMessage: Codable, Identifiable {
 
         @PolymorphicCodable(identifier: "output-available") @MemberwiseInit(.public)
         public struct OutputAvailableState {
-            public let type: String  // tool-{name}
+            public let type: String  // tool-{name} or dynamic-tool
             public let state = "output-available"
             public let toolCallId: String
             public let providerExecuted: Bool?
@@ -104,7 +104,7 @@ public struct ChatMessage: Codable, Identifiable {
 
         @PolymorphicCodable(identifier: "output-error") @MemberwiseInit(.public)
         public struct OutputErrorState {
-            public let type: String  // tool-{name}
+            public let type: String  // tool-{name} or dynamic-tool
             public let state = "output-error"
             public let toolCallId: String
             public let providerExecuted: Bool?
