@@ -96,9 +96,11 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                     task.resolve(snapshot)
                     chatTasks.removeValue(forKey: msg.id)
                     // advertise tool calls
-                    for p in snapshot.parts {
-                        if case .toolInvocation(let p) = p, p.toolInvocation.state == .call {
-                            options.onToolCall?(p.toolInvocation, self)
+                    for part in snapshot.parts {
+                        if case .tool(let toolPart) = part {
+                            if case .inputAvailable(let state) = toolPart {
+                                options.onToolCall?(state, self)
+                            }
                         }
                     }
                 }
@@ -210,21 +212,26 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 
         let updatedParts = lastMsg.parts.map { part in
             switch part {
-            case .toolInvocation(let part) where part.toolInvocation.toolCallId == toolCallId:
-                found = true
-                let prev = part.toolInvocation
-                return ChatMessage.Part.toolInvocation(
-                    .init(
-                        toolInvocation: .init(
-                            state: .result,
-                            toolCallId: prev.toolCallId,
-                            toolName: prev.toolName,
-                            input: prev.input,
-                            output: output,
-                            step: prev.step,
+            case .tool(let toolPart):
+                switch toolPart {
+                case .inputAvailable(let s) where s.toolCallId == toolCallId:
+                    found = true
+                    return ChatMessage.Part.tool(
+                        .outputAvailable(
+                            .init(
+                                type: s.type,
+                                toolCallId: s.toolCallId,
+                                providerExecuted: nil,
+                                input: s.input,
+                                callProviderMetadata: s.callProviderMetadata,
+                                output: output,
+                                preliminary: nil
+                            )
                         )
                     )
-                )
+                default:
+                    return part
+                }
             default:
                 return part
             }
@@ -289,7 +296,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 
 @MemberwiseInit(.public)
 public struct AgentClientOptions<State: Codable> {
-    public let onToolCall: ((ChatMessage.ToolInvocation, AgentClient<State>) -> Void)?
+    public let onToolCall: ((ChatMessage.ToolPart.InputAvailableState, AgentClient<State>) -> Void)?
     public let onClientStateUpdate: ((State, AgentClient<State>) -> Void)?
     public let onServerStateUpdate: ((State, AgentClient<State>) -> Void)?
     public let onMcpUpdate: ((MCPServersState, AgentClient<State>) -> Void)?
