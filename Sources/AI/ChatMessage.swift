@@ -47,19 +47,11 @@ public struct ChatMessage: Codable, Identifiable {
         public let type = "tool"
         public let toolName: String
         public let toolCallId: String
+        public let dynamic: Bool
         public let providerExecuted: Bool?
-        public let state: State
-
-        public typealias State = ToolState
-    }
-
-    @PolymorphicCodable(identifier: "dynamic-tool") @MemberwiseInit(.public)
-    public struct DynamicToolPart {
-        public let type = "dynamic-tool"
-        public let toolName: String
-        public let toolCallId: String
-        public let providerExecuted: Bool?
-        public let state: State
+        public var input: AnyCodable?
+        public var callProviderMetadata: ProviderMetadata?
+        public var state: State
 
         public typealias State = ToolState
     }
@@ -113,7 +105,6 @@ public enum MessagePart {
     case text(ChatMessage.TextPart)
     case reasoning(ChatMessage.ReasoningPart)
     case tool(ChatMessage.ToolPart)
-    case dynamicTool(ChatMessage.DynamicToolPart)
     case sourceURL(ChatMessage.SourceURLPart)
     case sourceDocument(ChatMessage.SourceDocumentPart)
     case file(ChatMessage.FilePart)
@@ -121,7 +112,7 @@ public enum MessagePart {
     case stepStart(ChatMessage.StepStartPart)
 }
 
-@PolymorphicEnumCodable(identifierCodingKey: "state")
+@PolymorphicEnumCodable(identifierCodingKey: "name")
 public enum ToolState {
     case inputStreaming(InputStreamingState)
     case inputAvailable(InputAvailableState)
@@ -130,27 +121,24 @@ public enum ToolState {
 
     @PolymorphicCodable(identifier: "input-streaming") @MemberwiseInit(.public)
     public struct InputStreamingState {
-        public var input: AnyCodable?
+        public let name = "input-streaming"
     }
 
     @PolymorphicCodable(identifier: "input-available") @MemberwiseInit(.public)
     public struct InputAvailableState {
-        public let input: AnyCodable
-        public let callProviderMetadata: ChatMessage.ProviderMetadata?
+        public let name = "input-available"
     }
 
     @PolymorphicCodable(identifier: "output-available") @MemberwiseInit(.public)
     public struct OutputAvailableState {
-        public let input: AnyCodable
-        public let callProviderMetadata: ChatMessage.ProviderMetadata?
+        public let name = "output-available"
         public let output: AnyCodable?
         public let preliminary: Bool?
     }
 
     @PolymorphicCodable(identifier: "output-error") @MemberwiseInit(.public)
     public struct OutputErrorState {
-        public let input: AnyCodable?
-        public let callProviderMetadata: ChatMessage.ProviderMetadata?
+        public let name = "output-error"
         public let rawInput: AnyCodable?
         public let errorText: String
     }
