@@ -7,6 +7,7 @@ public struct ChatMessage: Codable, Identifiable {
     public let id: String
     public let role: Role
     public let metadata: AnyCodable?
+    public let parts: [Part]
 
     public enum Role: String, Codable {
         case system

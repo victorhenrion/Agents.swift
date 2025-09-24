@@ -53,7 +53,7 @@ package struct ChatMessageBuilder {
         case .data(let c):
             parts[UUID().uuidString] = .data(.init(type: c.type, id: c.id, data: c.data))
         case .error(let c):
-            break
+            break  // TODO: handle this
         case .startStep(_):
             parts[UUID().uuidString] = .stepStart(.init())
         case .finishStep(_):
@@ -68,14 +68,16 @@ package struct ChatMessageBuilder {
         case .messageMetadata(let m):
             messageMetadata = m.messageMetadata
         }
+        // (no cases should be missed)
     }
 
-    package func snapshot() -> ChatMessage {
+    package func snapshot() -> ChatMessage? {
+        guard let messageId = messageId else { return nil }  // means missing start frame
+
         return ChatMessage(
-            id: messageId ?? UUID().uuidString,
-            createdAt: Date(),
+            id: messageId,
             role: .assistant,
-            annotations: messageMetadata.map { [$0] } ?? [],
+            metadata: messageMetadata,
             parts: parts.values.elements
         )
     }
@@ -168,29 +170,3 @@ extension ChatMessage.ToolPart {
         state = .outputError(.init(errorText: chunk.errorText))
     }
 }
-
-/*
-extension ChatMessage.ToolPart.InputStreamingState {
-    init(_ chunk: ChatMessageChunk.ToolInputStart) {
-        self.init(
-            type: (chunk.dynamic == true ? "dynamic-tool" : "tool-\(chunk.toolName)"),
-            toolCallId: chunk.toolCallId,
-            providerExecuted: chunk.providerExecuted,
-            input: nil)
-    }
-    mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
-        input = AnyCodable(input?.value as? String ?? "" + chunk.inputTextDelta)
-    }
-}
-
-extension ChatMessage.ToolPart.InputAvailableState {
-    init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
-        self.init(
-            type: (chunk.dynamic == true ? "dynamic-tool" : "tool-\(chunk.toolName)"),
-            toolCallId: chunk.toolCallId,
-            providerExecuted: chunk.providerExecuted,
-            input: chunk.input,
-            callProviderMetadata: chunk.providerMetadata)
-    }
-}
-*/
