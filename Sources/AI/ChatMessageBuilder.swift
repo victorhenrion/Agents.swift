@@ -10,17 +10,17 @@ package struct ChatMessageBuilder {
     private var toolStates: [String: PendingToolInvocation] = [:]
     private var toolOrder: [String] = []
     private var hasStepStart: Bool = false
-    private var finish: ChatMessageStreamFrame.FinishFrame?
-    private var dataDone: ChatMessageStreamFrame.DataDoneFrame?
+    private var finish: ChatMessageChunk.FinishFrame?
+    private var dataDone: ChatMessageChunk.DataDoneFrame?
     private var lastError: String?
 
     package init() {}
 
-    package mutating func apply(frames: [ChatMessageStreamFrame]) {
+    package mutating func apply(frames: [ChatMessageChunk]) {
         for f in frames { apply(frame: f) }
     }
 
-    package mutating func apply(frame: ChatMessageStreamFrame) {
+    package mutating func apply(frame: ChatMessageChunk) {
         switch frame {
         case .start(let s): handleStart(s)
         case .text(let t): handleText(t)
@@ -70,7 +70,7 @@ package struct ChatMessageBuilder {
     }
 
     private func buildAnnotations() -> [AnyCodable] {
-        func pack(_ reason: String?, _ usage: ChatMessageStreamFrame.FinishFrame.Usage?)
+        func pack(_ reason: String?, _ usage: ChatMessageChunk.FinishFrame.Usage?)
             -> [AnyCodable]
         {
             var dict: [String: Any] = [:]
@@ -92,7 +92,7 @@ package struct ChatMessageBuilder {
 
     // MARK: - Frame handlers
 
-    private mutating func handleStart(_ s: ChatMessageStreamFrame.StartFrame) {
+    private mutating func handleStart(_ s: ChatMessageChunk.StartFrame) {
         if let mid = s.messageId { assistantMessageId = mid }
         if let ts = s.createdAt { createdAt = ts }
         ensureStepStarted()
@@ -103,14 +103,14 @@ package struct ChatMessageBuilder {
         textBuffer.append(t)
     }
 
-    private mutating func handleReasoning(_ r: ChatMessageStreamFrame.ReasoningFrame) {
+    private mutating func handleReasoning(_ r: ChatMessageChunk.ReasoningFrame) {
         ensureStepStarted()
         reasoningBuffer.append(r.text)
     }
 
     private mutating func addSource(_ s: ChatMessage.Source) { sources.append(s) }
 
-    private mutating func handleToolStart(_ t: ChatMessageStreamFrame.ToolCallStartFrame) {
+    private mutating func handleToolStart(_ t: ChatMessageChunk.ToolCallStartFrame) {
         ensureStepStarted()
         upsertTool(t.toolCallId) { acc in
             if let name = t.toolName { acc.toolName = name }
@@ -119,7 +119,7 @@ package struct ChatMessageBuilder {
         }
     }
 
-    private mutating func handleToolDelta(_ d: ChatMessageStreamFrame.ToolCallDeltaFrame) {
+    private mutating func handleToolDelta(_ d: ChatMessageChunk.ToolCallDeltaFrame) {
         ensureStepStarted()
         upsertTool(d.toolCallId) { acc in
             if let delta = d.inputDelta { acc.input = delta }
@@ -127,7 +127,7 @@ package struct ChatMessageBuilder {
         }
     }
 
-    private mutating func handleToolCall(_ t: ChatMessageStreamFrame.ToolCallFrame) {
+    private mutating func handleToolCall(_ t: ChatMessageChunk.ToolCallFrame) {
         ensureStepStarted()
         upsertTool(t.toolCallId) { acc in
             acc.toolName = t.toolName
@@ -136,7 +136,7 @@ package struct ChatMessageBuilder {
         }
     }
 
-    private mutating func handleToolResult(_ r: ChatMessageStreamFrame.ToolResultFrame) {
+    private mutating func handleToolResult(_ r: ChatMessageChunk.ToolResultFrame) {
         upsertTool(r.toolCallId) { acc in
             acc.output = r.output
             acc.state = .result
