@@ -195,7 +195,7 @@ extension ChatMessageChunk {
             {
                 chunks.append(chunk)
             } else {
-                print("Failed to parse chunk: \(line)")
+                print("Failed to parse chunk: \"\(line)\"")
             }
         }
         return chunks
