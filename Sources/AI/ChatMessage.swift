@@ -53,7 +53,7 @@ public struct ChatMessage: Codable, Identifiable {
         }
     }
 
-    @PolymorphicEnumCodable(identifierCodingKey: "state")
+    //@PolymorphicEnumCodable(identifierCodingKey: "state")
     public enum ToolPart {
         case inputStreaming(InputStreamingState)
         case inputAvailable(InputAvailableState)
@@ -201,6 +201,43 @@ extension ChatMessage.Part: Codable {
         case .data(let value):
             try value.encode(to: encoder)
         case .stepStart(let value):
+            try value.encode(to: encoder)
+        }
+    }
+}
+
+extension ChatMessage.ToolPart: Codable {
+    enum PolymorphicMetaCodingKey: CodingKey {
+        case `state`
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: PolymorphicMetaCodingKey.self)
+        let type = try container.decode(String.self, forKey: PolymorphicMetaCodingKey.state)
+
+        switch type {
+        case InputStreamingState.polymorphicIdentifier:
+            self = .inputStreaming(try InputStreamingState(from: decoder))
+        case InputAvailableState.polymorphicIdentifier:
+            self = .inputAvailable(try InputAvailableState(from: decoder))
+        case OutputAvailableState.polymorphicIdentifier:
+            self = .outputAvailable(try OutputAvailableState(from: decoder))
+        case OutputErrorState.polymorphicIdentifier:
+            self = .outputError(try OutputErrorState(from: decoder))
+        default:
+            throw PolymorphicCodableError.unableToFindPolymorphicType(type)
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        switch self {
+        case .inputStreaming(let value):
+            try value.encode(to: encoder)
+        case .inputAvailable(let value):
+            try value.encode(to: encoder)
+        case .outputAvailable(let value):
+            try value.encode(to: encoder)
+        case .outputError(let value):
             try value.encode(to: encoder)
         }
     }
