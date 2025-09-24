@@ -24,7 +24,7 @@ package struct ChatMessageBuilder {
         case .reasoningEnd(let c):
             updateReasoningPart(c.id) { $0.apply(c) }
         case .toolInputStart(let c):
-            parts[c.toolCallId] = .tool(.inputStreaming(.init(c)))
+            parts[c.toolCallId] = /*c.dynamic == true ? .dynamicTool(.init(c)) :*/ .tool(.init(c))
         case .toolInputDelta(let c):
             updateToolPart(c.toolCallId) { $0.apply(c) }
         case .toolInputAvailable(let c):
@@ -97,12 +97,11 @@ package struct ChatMessageBuilder {
     }
 
     private mutating func updateToolPart(
-        _ id: String, _ updater: (inout ChatMessage.ToolPart.InputStreamingState) -> Void
+        _ id: String, _ updater: (inout ChatMessage.ToolPart) -> Void
     ) {
-        guard case .tool(let part) = parts[id] else { return }
-        guard case .inputStreaming(var state) = part else { return }
-        updater(&state)
-        parts[id] = .tool(.inputStreaming(state))
+        guard case .tool(var part) = parts[id] else { return }
+        updater(&part)
+        parts[id] = .tool(part)
     }
 }
 
@@ -134,6 +133,21 @@ extension ChatMessage.ReasoningPart {
     }
 }
 
+extension ChatMessage.ToolPart {
+    init(_ chunk: ChatMessageChunk.ToolInputStart) {
+        self.init(
+            toolName: chunk.toolName,
+            toolCallId: chunk.toolCallId,
+            providerExecuted: chunk.providerExecuted,
+            state: .inputStreaming(.init(input: nil))
+        )
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
+        input = AnyCodable(input?.value as? String ?? "" + chunk.inputTextDelta)
+    }
+}
+
+/*
 extension ChatMessage.ToolPart.InputStreamingState {
     init(_ chunk: ChatMessageChunk.ToolInputStart) {
         self.init(
@@ -157,3 +171,4 @@ extension ChatMessage.ToolPart.InputAvailableState {
             callProviderMetadata: chunk.providerMetadata)
     }
 }
+*/
