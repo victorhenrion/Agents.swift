@@ -147,7 +147,8 @@ package enum ChatMessageChunk {
     }
 
     // this is our fallback type, if chunk doesn't conform to it, it will throw (good)
-    package struct Data: Decodable {
+    @PolymorphicDecodable(identifier: "data")  // ->>> this is required but then I think we loose or custom type, which is an issue in the builder (TODO: check this)
+    package struct Data {
         let type: String  // "data-{name}"
         let id: String?
         let data: AnyCodable
