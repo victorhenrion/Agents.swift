@@ -34,7 +34,9 @@ package struct ChatMessageBuilder {
         case .toolInputAvailable(let c):
             parts[c.toolCallId] = c.dynamic == true ? .dynamicTool(.init(c)) : .tool(.init(c))
         case .toolInputError(let c):
-            break  // TODO: handle this (not sure how the spec does it)
+            c.dynamic == true
+                ? updateDynamicToolPart(c.toolCallId) { $0.apply(c) }
+                : updateToolPart(c.toolCallId) { $0.apply(c) }
         case .toolOutputAvailable(let c):
             c.dynamic == true
                 ? updateDynamicToolPart(c.toolCallId) { $0.apply(c) }
@@ -154,6 +156,13 @@ extension ChatMessage.ReasoningPart {
 extension ChatMessage.AnyToolPart {
     fileprivate mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
         input = AnyCodable(input?.value as? String ?? "" + chunk.inputTextDelta)
+    }
+    fileprivate mutating func apply(_ chunk: ChatMessageChunk.ToolInputError) {
+        providerExecuted = chunk.providerExecuted
+        input = chunk.input
+        callProviderMetadata = chunk.providerMetadata
+        errorText = chunk.errorText
+        state = .outputError
     }
     fileprivate mutating func apply(_ chunk: ChatMessageChunk.ToolOutputAvailable) {
         providerExecuted = chunk.providerExecuted
