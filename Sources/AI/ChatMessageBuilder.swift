@@ -124,79 +124,81 @@ package struct ChatMessageBuilder {
 }
 
 extension ChatMessage.TextPart {
-    init(_ chunk: ChatMessageChunk.TextStart) {
+    fileprivate init(_ chunk: ChatMessageChunk.TextStart) {
         self.init(text: "", state: .streaming, providerMetadata: chunk.providerMetadata)
     }
-    mutating func apply(_ chunk: ChatMessageChunk.TextDelta) {
+    fileprivate mutating func apply(_ chunk: ChatMessageChunk.TextDelta) {
         text += chunk.delta
         providerMetadata = chunk.providerMetadata
     }
-    mutating func apply(_ chunk: ChatMessageChunk.TextEnd) {
+    fileprivate mutating func apply(_ chunk: ChatMessageChunk.TextEnd) {
         state = .done
         providerMetadata = chunk.providerMetadata
     }
 }
 
 extension ChatMessage.ReasoningPart {
-    init(_ chunk: ChatMessageChunk.ReasoningStart) {
+    fileprivate init(_ chunk: ChatMessageChunk.ReasoningStart) {
         self.init(text: "", state: .streaming, providerMetadata: chunk.providerMetadata)
     }
-    mutating func apply(_ chunk: ChatMessageChunk.ReasoningDelta) {
+    fileprivate mutating func apply(_ chunk: ChatMessageChunk.ReasoningDelta) {
         text += chunk.delta
         providerMetadata = chunk.providerMetadata
     }
-    mutating func apply(_ chunk: ChatMessageChunk.ReasoningEnd) {
+    fileprivate mutating func apply(_ chunk: ChatMessageChunk.ReasoningEnd) {
         providerMetadata = chunk.providerMetadata
         state = .done
     }
 }
 
-extension ChatMessage.ToolPart {
-    init(_ chunk: ChatMessageChunk.ToolInputStart) {
-        self.init(
-            type: "tool-\(chunk.toolName)",
-            toolCallId: chunk.toolCallId,
-            state: .inputStreaming,
-            providerExecuted: chunk.providerExecuted,
-            input: nil,
-            callProviderMetadata: nil,
-            output: nil,
-            preliminary: nil,
-            errorText: nil
-        )
-    }
-    mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
+extension ChatMessage.AnyToolPart {
+    fileprivate mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
         input = AnyCodable(input?.value as? String ?? "" + chunk.inputTextDelta)
     }
-    init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
-        self.init(
-            type: "tool-\(chunk.toolName)",
-            toolCallId: chunk.toolCallId,
-            state: .inputAvailable,
-            providerExecuted: chunk.providerExecuted,
-            input: chunk.input,
-            callProviderMetadata: chunk.providerMetadata,
-            output: nil,
-            preliminary: nil,
-            errorText: nil
-        )
-    }
-    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputAvailable) {
+    fileprivate mutating func apply(_ chunk: ChatMessageChunk.ToolOutputAvailable) {
         providerExecuted = chunk.providerExecuted
         output = chunk.output
         preliminary = chunk.preliminary
         state = .outputAvailable
     }
-    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputError) {
+    fileprivate mutating func apply(_ chunk: ChatMessageChunk.ToolOutputError) {
         providerExecuted = chunk.providerExecuted
         errorText = chunk.errorText
         state = .outputError
     }
 }
 
-// same as ToolPart, but instead of type, it has toolName (not very dry...)
+extension ChatMessage.ToolPart {
+    fileprivate init(_ chunk: ChatMessageChunk.ToolInputStart) {
+        self.init(
+            type: "tool-\(chunk.toolName)",
+            toolCallId: chunk.toolCallId,
+            state: .inputStreaming,
+            providerExecuted: chunk.providerExecuted,
+            input: nil,
+            callProviderMetadata: nil,
+            output: nil,
+            preliminary: nil,
+            errorText: nil
+        )
+    }
+    fileprivate init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
+        self.init(
+            type: "tool-\(chunk.toolName)",
+            toolCallId: chunk.toolCallId,
+            state: .inputAvailable,
+            providerExecuted: chunk.providerExecuted,
+            input: chunk.input,
+            callProviderMetadata: chunk.providerMetadata,
+            output: nil,
+            preliminary: nil,
+            errorText: nil
+        )
+    }
+}
+
 extension ChatMessage.DynamicToolPart {
-    init(_ chunk: ChatMessageChunk.ToolInputStart) {
+    fileprivate init(_ chunk: ChatMessageChunk.ToolInputStart) {
         self.init(
             toolName: chunk.toolName,
             toolCallId: chunk.toolCallId,
@@ -209,10 +211,7 @@ extension ChatMessage.DynamicToolPart {
             errorText: nil
         )
     }
-    mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
-        input = AnyCodable(input?.value as? String ?? "" + chunk.inputTextDelta)
-    }
-    init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
+    fileprivate init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
         self.init(
             toolName: chunk.toolName,
             toolCallId: chunk.toolCallId,
@@ -224,16 +223,5 @@ extension ChatMessage.DynamicToolPart {
             preliminary: nil,
             errorText: nil
         )
-    }
-    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputAvailable) {
-        providerExecuted = chunk.providerExecuted
-        output = chunk.output
-        preliminary = chunk.preliminary
-        state = .outputAvailable
-    }
-    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputError) {
-        providerExecuted = chunk.providerExecuted
-        errorText = chunk.errorText
-        state = .outputError
     }
 }

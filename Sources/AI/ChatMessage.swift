@@ -59,26 +59,40 @@ public struct ChatMessage: Codable, Identifiable {
         }
     }
 
+    public protocol AnyToolPart {
+        var type: String { get }
+        var toolName: String { get }
+        var toolCallId: String { get }
+
+        var state: ToolState { get set }
+        var providerExecuted: Bool? { get set }
+        var input: AnyCodable? { get set }
+        var callProviderMetadata: ChatMessage.ProviderMetadata? { get set }
+        var output: AnyCodable? { get set }
+        var preliminary: Bool? { get set }
+        var errorText: String? { get set }
+    }
+
+    public enum ToolState: String, Codable {
+        case inputStreaming = "input-streaming"
+        case inputAvailable = "input-available"
+        case outputAvailable = "output-available"
+        case outputError = "output-error"
+    }
+
     @PolymorphicCodable(identifier: "dynamic-tool") @MemberwiseInit(.public)
-    public struct DynamicToolPart {
+    public struct DynamicToolPart: AnyToolPart {
         public let type = "dynamic-tool"
         public let toolName: String
         public let toolCallId: String
 
-        public var state: State
+        public var state: ToolState
         public var providerExecuted: Bool?
         public var input: AnyCodable?
         public var callProviderMetadata: ChatMessage.ProviderMetadata?
         public var output: AnyCodable?
         public var preliminary: Bool?
         public var errorText: String?
-
-        public enum State: String, Codable {
-            case inputStreaming = "input-streaming"
-            case inputAvailable = "input-available"
-            case outputAvailable = "output-available"
-            case outputError = "output-error"
-        }
     }
 
     @PolymorphicCodable(identifier: "source-url") @MemberwiseInit(.public)
@@ -115,30 +129,26 @@ public struct ChatMessage: Codable, Identifiable {
     }
 
     @PolymorphicCodable(identifier: "tool") @MemberwiseInit(.public)
-    public struct ToolPart {
+    public struct ToolPart: AnyToolPart {
         public let type: String  // tool-{name}
+        public var toolName: String { type.deletingPrefix("tool-") }
         public let toolCallId: String
 
-        public var state: State
+        public var state: ToolState
         public var providerExecuted: Bool?
         public var input: AnyCodable?
         public var callProviderMetadata: ChatMessage.ProviderMetadata?
         public var output: AnyCodable?
         public var preliminary: Bool?
         public var errorText: String?
-
-        public var toolName: String { type.deletingPrefix("tool-") }
-
-        public typealias State = DynamicToolPart.State
     }
 
     @PolymorphicCodable(identifier: "data") @MemberwiseInit(.public)
     public struct DataPart {
         public let type: String  // data-{name}
+        public var dataType: String { type.deletingPrefix("data-") }
         public let id: String?
         public let data: AnyCodable?
-
-        public var dataType: String { type.deletingPrefix("data-") }
     }
 
     public typealias ProviderMetadata = [String: [String: AnyCodable]]
