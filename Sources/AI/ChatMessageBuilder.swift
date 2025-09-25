@@ -45,15 +45,13 @@ package struct ChatMessageBuilder {
                 .init(
                     sourceId: c.sourceId, mediaType: c.mediatype, title: c.title,
                     filename: c.filename, providerMetadata: c.providerMetadata))
-        case .file(let c):  // TS types are probably wrong (nil filename?)
+        case .file(let c):
             parts[UUID().uuidString] = .file(
                 .init(
-                    mediaType: c.mediatype, filename: nil,
+                    mediaType: c.mediatype, filename: nil,  // TS types are probably wrong (nil filename?)
                     url: c.url, providerMetadata: nil))
         case .data(let c):
-            parts[UUID().uuidString] = .data(
-                .init(
-                    dataType: c.type.deletingPrefix("data-"), id: c.id, data: c.data))
+            parts[UUID().uuidString] = .data(.init(type: c.type, id: c.id, data: c.data))
         case .error(let c):
             break  // TODO: handle this
         case .startStep(_):
@@ -66,7 +64,7 @@ package struct ChatMessageBuilder {
         case .finish(let c):
             messageMetadata = c.messageMetadata
         case .abort(_):
-            break
+            break  //TODO: handle this maybe
         case .messageMetadata(let m):
             messageMetadata = m.messageMetadata
         }
@@ -140,13 +138,15 @@ extension ChatMessage.ReasoningPart {
 extension ChatMessage.ToolPart {
     init(_ chunk: ChatMessageChunk.ToolInputStart) {
         self.init(
-            toolName: chunk.toolName,
+            type: "tool-\(chunk.toolName)",
             toolCallId: chunk.toolCallId,
-            dynamic: chunk.dynamic == true,
+            state: .inputStreaming,
             providerExecuted: chunk.providerExecuted,
             input: nil,
             callProviderMetadata: nil,
-            state: .inputStreaming(.init())
+            output: nil,
+            preliminary: nil,
+            errorText: nil
         )
     }
     mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
@@ -154,28 +154,26 @@ extension ChatMessage.ToolPart {
     }
     init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
         self.init(
-            toolName: chunk.toolName,
+            type: "tool-\(chunk.toolName)",
             toolCallId: chunk.toolCallId,
-            dynamic: chunk.dynamic == true,
+            state: .inputAvailable,
             providerExecuted: chunk.providerExecuted,
             input: chunk.input,
             callProviderMetadata: chunk.providerMetadata,
-            state: .inputAvailable(.init())
+            output: nil,
+            preliminary: nil,
+            errorText: nil
         )
     }
     mutating func apply(_ chunk: ChatMessageChunk.ToolOutputAvailable) {
         providerExecuted = chunk.providerExecuted
-        state = .outputAvailable(.init(output: chunk.output, preliminary: chunk.preliminary))
+        output = chunk.output
+        preliminary = chunk.preliminary
+        state = .outputAvailable
     }
     mutating func apply(_ chunk: ChatMessageChunk.ToolOutputError) {
         providerExecuted = chunk.providerExecuted
-        state = .outputError(.init(errorText: chunk.errorText))
-    }
-}
-
-extension String {
-    fileprivate func deletingPrefix(_ prefix: String) -> String {
-        guard self.hasPrefix(prefix) else { return self }
-        return String(self.dropFirst(prefix.count))
+        errorText = chunk.errorText
+        state = .outputError
     }
 }
