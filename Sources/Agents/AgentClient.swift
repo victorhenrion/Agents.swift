@@ -94,10 +94,15 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                     chatTasks.removeValue(forKey: msg.id)
                     // advertise tool calls
                     for part in snapshot.parts {
-                        if case .tool(let toolPart) = part {
-                            if case .inputAvailable = toolPart.state {
-                                options.onToolCall?(toolPart, self)
-                            }
+                        if case .tool(let toolPart) = part,
+                            case .inputAvailable = toolPart.state
+                        {
+                            options.onToolCall?(toolPart, self)
+                        }
+                        if case .dynamicTool(let toolPart) = part,
+                            case .inputAvailable = toolPart.state
+                        {
+                            options.onDynamicToolCall?(toolPart, self)
                         }
                     }
                 }
@@ -211,19 +216,27 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         let updatedParts = lastMsg.parts.map { part in
             switch part {
             case .tool(let toolPart) where toolPart.toolCallId == toolCallIdTarget:
-                switch toolPart.state {
-                case .inputAvailable:
+                if case .inputAvailable = toolPart.state {
                     found = true
                     var new = toolPart
                     new.output = output
+                    new.preliminary = preliminary
                     new.state = .outputAvailable
                     return ChatMessage.Part.tool(new)
-                default:
-                    return part
+                }
+            case .dynamicTool(let toolPart) where toolPart.toolCallId == toolCallIdTarget:
+                if case .inputAvailable = toolPart.state {
+                    found = true
+                    var new = toolPart
+                    new.output = output
+                    new.preliminary = preliminary
+                    new.state = .outputAvailable
+                    return ChatMessage.Part.dynamicTool(new)
                 }
             default:
-                return part
+                break
             }
+            return part
         }
 
         if !found {
@@ -284,6 +297,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 @MemberwiseInit(.public)
 public struct AgentClientOptions<State: Codable> {
     public let onToolCall: ((ChatMessage.ToolPart, AgentClient<State>) -> Void)?
+    public let onDynamicToolCall: ((ChatMessage.DynamicToolPart, AgentClient<State>) -> Void)?
     public let onClientStateUpdate: ((State, AgentClient<State>) -> Void)?
     public let onServerStateUpdate: ((State, AgentClient<State>) -> Void)?
     public let onMcpUpdate: ((MCPServersState, AgentClient<State>) -> Void)?
