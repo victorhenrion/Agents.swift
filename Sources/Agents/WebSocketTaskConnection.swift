@@ -1,45 +1,33 @@
 import Foundation
 
-public enum WebSocketMessageFormat {
-    case preserve  // default: preserve frame type (text stays text, data stays data)
-    case text  // force both directions to be text frames
-    case binary  // force both directions to be binary frames
-}
+class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
 
-protocol WebSocketConnection {
-    func send(text: String)
-    func send(data: Data)
-    func connect()
-    func disconnect()
-    var delegate: WebSocketConnectionDelegate! { get set }
+    protocol Delegate {
+        func onConnected()
+        func onDisconnected(error: Error?)
+        func onError(error: Error)
+        func onMessage(text: String)
+        func onMessage(data: Data)
+    }
 
-    // NEW: control how frames are sent and delivered
-    var messageFormat: WebSocketMessageFormat { get set }
-    var textEncoding: String.Encoding { get set }
-}
+    enum MessageFormat {
+        case preserve  // default: preserve frame type (text stays text, data stays data)
+        case text  // force both directions to be text frames
+        case binary  // force both directions to be binary frames
+    }
 
-protocol WebSocketConnectionDelegate {
-    func onConnected()
-    func onDisconnected(error: Error?)
-    func onError(error: Error)
-    func onMessage(text: String)
-    func onMessage(data: Data)
-}
-
-class WebSocketTaskConnection: NSObject, WebSocketConnection, URLSessionWebSocketDelegate {
-    var delegate: WebSocketConnectionDelegate!
+    var delegate: Delegate!
     let delegateQueue = OperationQueue()
     var urlSession: URLSession!
     var webSocketTask: URLSessionWebSocketTask!
-
-    // NEW: format & encoding knobs (with sensible defaults)
-    var messageFormat: WebSocketMessageFormat
+    var messageFormat: MessageFormat
     var textEncoding: String.Encoding
+    var state: URLSessionTask.State = .suspended
 
     init(
         url inputURL: URL,
         headers: [String: String]? = nil,
-        messageFormat: WebSocketMessageFormat = .preserve,
+        messageFormat: MessageFormat = .preserve,
         textEncoding: String.Encoding = .utf8
     ) {
         let url = {
@@ -71,6 +59,7 @@ class WebSocketTaskConnection: NSObject, WebSocketConnection, URLSessionWebSocke
         webSocketTask: URLSessionWebSocketTask,
         didOpenWithProtocol `protocol`: String?
     ) {
+        self.state = webSocketTask.state
         self.delegate.onConnected()
     }
 
@@ -80,6 +69,7 @@ class WebSocketTaskConnection: NSObject, WebSocketConnection, URLSessionWebSocke
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?
     ) {
+        self.state = webSocketTask.state
         self.delegate.onDisconnected(error: nil)
     }
 
@@ -136,34 +126,38 @@ class WebSocketTaskConnection: NSObject, WebSocketConnection, URLSessionWebSocke
         }
     }
 
-    func send(text: String) {
-        switch messageFormat {
-        case .preserve, .text:
-            webSocketTask.send(.string(text)) { [weak self] error in
-                if let error = error { self?.delegate.onError(error: error) }
-            }
+    func send(text: String) async throws {
+        return try await withCheckedThrowingContinuation { cont in
+            switch messageFormat {
+            case .preserve, .text:
+                webSocketTask.send(.string(text)) { error in
+                    if let error = error { cont.resume(throwing: error) } else { cont.resume() }
+                }
 
-        case .binary:
-            // Force to binary frame
-            let data = text.data(using: textEncoding) ?? Data(text.utf8)
-            webSocketTask.send(.data(data)) { [weak self] error in
-                if let error = error { self?.delegate.onError(error: error) }
+            case .binary:
+                // Force to binary frame
+                let data = text.data(using: textEncoding) ?? Data(text.utf8)
+                webSocketTask.send(.data(data)) { error in
+                    if let error = error { cont.resume(throwing: error) } else { cont.resume() }
+                }
             }
         }
     }
 
-    func send(data: Data) {
-        switch messageFormat {
-        case .preserve, .binary:
-            webSocketTask.send(.data(data)) { [weak self] error in
-                if let error = error { self?.delegate.onError(error: error) }
-            }
+    func send(data: Data) async throws {
+        return try await withCheckedThrowingContinuation { cont in
+            switch messageFormat {
+            case .preserve, .binary:
+                webSocketTask.send(.data(data)) { error in
+                    if let error = error { cont.resume(throwing: error) } else { cont.resume() }
+                }
 
-        case .text:
-            // Try to make a text frame from the data; if not decodable, send base64 text
-            let text = String(data: data, encoding: textEncoding) ?? data.base64EncodedString()
-            webSocketTask.send(.string(text)) { [weak self] error in
-                if let error = error { self?.delegate.onError(error: error) }
+            case .text:
+                // Try to make a text frame from the data; if not decodable, send base64 text
+                let text = String(data: data, encoding: textEncoding) ?? data.base64EncodedString()
+                webSocketTask.send(.string(text)) { error in
+                    if let error = error { cont.resume(throwing: error) } else { cont.resume() }
+                }
             }
         }
     }

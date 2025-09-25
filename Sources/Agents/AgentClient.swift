@@ -8,19 +8,20 @@ import MemberwiseInit
 // todo: handle task timeout
 // todo: implement cancel message (?)
 @Observable
-public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
+public class AgentClient<State: Codable>: WebSocketClient.Delegate {
     private let instanceURL: URL
-    private var ws: WebSocketConnection
+    private var ws: WebSocketClient
     private let options: AgentClientOptions<State>
     private var chatTasks: [String: ChatTask] = [:]
     private var rpcTasks: [String: AnyRPCTask] = [:]
     public private(set) var messages: [ChatMessage] = []
+    public private(set) var connected: Bool = false
 
     public init(instanceURL: URL, options: AgentClientOptions<State>) {
         self.instanceURL = instanceURL
         self.options = options
 
-        self.ws = WebSocketTaskConnection(
+        self.ws = WebSocketClient(
             url: instanceURL, headers: options.headers, messageFormat: .text
         )
         ws.delegate = self
@@ -42,169 +43,193 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     }
 
     func onMessage(text: String) {
-        do {
-            let incomingMessage = try jsonDecoder.decode(
-                IncomingMessage.self, from: text.data(using: .utf8) ?? Data()
-            )
+        guard
+            let incomingMessage = try? jsonDecoder.decode(
+                IncomingMessage.self, from: text.data(using: .utf8) ?? Data())
+        else {
+            print("AgentClient: failed to parse incoming message: \(text)")
+            return
+        }
 
-            switch incomingMessage {
-            case .cf_agent_state(let msg):
-                if let state = msg.state as? State {
-                    options.onServerStateUpdate?(state, self)
-                }  // fails silently
-                return
-            case .cf_agent_mcp_servers(let msg):
-                options.onMcpUpdate?(msg.mcp, self)
-                return
-            case .rpc(let msg):  // TODO: STREAMING SUPPORT
-                guard let task = rpcTasks[msg.id] else { return }
-                //
-                guard let result = msg.result, msg.success == true else {
-                    // handle error
-                    task.reject(AgentError.rpcError(id: msg.id, error: msg.error))
-                    rpcTasks.removeValue(forKey: msg.id)
-                    return
-                }
-                guard let done = msg.done else {
-                    // handle non-streaming result
-                    task.resolve(result)
-                    rpcTasks.removeValue(forKey: msg.id)
-                    return
-                }
-                if done {
-                    // handle result
-                    task.resolve(result)
-                    rpcTasks.removeValue(forKey: msg.id)
-                }
-                return
-            case .cf_agent_use_chat_response(let msg):  // streaming only
-                guard var task = chatTasks[msg.id] else { return }
-                // Handle error (before parsing body, since it contains the error)
-                if msg.error == true {
-                    task.reject(AgentError.chatError(id: msg.id, error: msg.body))
-                    chatTasks.removeValue(forKey: msg.id)
-                    return
-                }
-                // Apply chunks into the builder
-                for chunk in ChatMessageChunk.parseAll(from: msg.body) {
-                    task.builder.apply(chunk: chunk)
-                }
-                // Persist updated builder state
-                chatTasks[msg.id] = task
-                // Create a snapshot and update local messages list
-                guard let snapshot = task.builder.snapshot() else { return }
-                upsertAssistantMessage(snapshot)
-                // Handle completion
-                if msg.done == true {
-                    task.resolve(snapshot)
-                    chatTasks.removeValue(forKey: msg.id)
-                    // advertise tool calls
-                    for part in snapshot.parts {
-                        if case .tool(let toolPart) = part,
-                            case .inputAvailable = toolPart.state
-                        {
-                            options.onToolCall?(toolPart, self)
-                        }
-                        if case .dynamicTool(let toolPart) = part,
-                            case .inputAvailable = toolPart.state
-                        {
-                            options.onDynamicToolCall?(toolPart, self)
-                        }
-                    }
-                }
-                return
-            case .cf_agent_chat_clear:
-                self.messages = []
-                return
-            case .cf_agent_chat_messages(let msg):
-                self.messages = msg.messages
-                return
-            @unknown default:
+        switch incomingMessage {
+        case .cf_agent_state(let msg):
+            if let state = msg.state as? State {
+                options.onServerStateUpdate?(state, self)
+            }  // fails silently
+            return
+        case .cf_agent_mcp_servers(let msg):
+            options.onMcpUpdate?(msg.mcp, self)
+            return
+        case .rpc(let msg):  // TODO: STREAMING SUPPORT
+            guard let task = rpcTasks[msg.id] else { return }
+            //
+            guard let result = msg.result, msg.success == true else {
+                // handle error
+                task.reject(.responseError(id: msg.id, message: msg.error))
+                rpcTasks.removeValue(forKey: msg.id)
                 return
             }
-        } catch {
-            print("AgentClient: error processing message: \(error)")
+            guard let done = msg.done else {
+                // handle non-streaming result
+                task.resolve(result)
+                rpcTasks.removeValue(forKey: msg.id)
+                return
+            }
+            if done {
+                // handle result
+                task.resolve(result)
+                rpcTasks.removeValue(forKey: msg.id)
+            }
+            return
+        case .cf_agent_use_chat_response(let msg):  // streaming only
+            guard var task = chatTasks[msg.id] else { return }
+            // Handle error (before parsing body, since it contains the error)
+            if msg.error == true {
+                task.reject(.responseError(id: msg.id, message: msg.body))
+                chatTasks.removeValue(forKey: msg.id)
+                return
+            }
+            // Apply chunks into the builder
+            for chunk in ChatMessageChunk.parseAll(from: msg.body) {
+                task.builder.apply(chunk: chunk)
+            }
+            // Persist updated builder state
+            chatTasks[msg.id] = task
+            // Create a snapshot and update local messages list
+            guard let snapshot = task.builder.snapshot() else { return }
+            upsertAssistantMessage(snapshot)
+            // Handle completion
+            if msg.done == true {
+                task.resolve(snapshot)
+                chatTasks.removeValue(forKey: msg.id)
+                // advertise tool calls
+                for part in snapshot.parts {
+                    if case .tool(let toolPart) = part,
+                        case .inputAvailable = toolPart.state
+                    {
+                        options.onToolCall?(toolPart, self)
+                    }
+                    if case .dynamicTool(let toolPart) = part,
+                        case .inputAvailable = toolPart.state
+                    {
+                        options.onDynamicToolCall?(toolPart, self)
+                    }
+                }
+            }
+            return
+        case .cf_agent_chat_clear:
+            self.messages = []
+            return
+        case .cf_agent_chat_messages(let msg):
+            self.messages = msg.messages
+            return
+        @unknown default:
+            print("AgentClient: unknown type for incoming message: \(incomingMessage)")
+            return
         }
     }
 
     func onMessage(data: Data) {
-        print("AgentClient: unexpected binary message: \(data)")
+        fatalError("AgentClient: unexpected binary message: \(data)")
     }
 
     func onConnected() {
-
+        connected = true
     }
 
     func onDisconnected(error: Error?) {
-
+        connected = false
     }
 
-    func onError(error: Error) {
-
+    func onError(error: Error) {  // todo
+        print("AgentClient: onError \(error)")
     }
 
     public func sendMessage(
         _ message: ChatMessage,
         body: [String: AnyEncodable] = [:]
     ) async throws -> ChatMessage {
-        return try await sendChatRequest(
+
+        let result = await sendChatRequest(
             message: message,
             body: body,
             onSent: { messages.append(message) }
         )
+        switch result {
+        case .success(let message): return message
+        case .failure(let error): throw error
+        }
     }
 
     func sendChatRequest(
         message: ChatMessage,
         body: [String: AnyEncodable] = [:],
-        onSent: () -> Void
-    ) async throws -> ChatMessage {
-
-        var body = body
-        body["messages"] = [message]
+        onSent: () -> Void = {}
+    ) async -> Result<ChatMessage, ChatError> {  // throws for send errors, returns failure for response errors
 
         let requestId = UUID().uuidString
-        let requestInit = [
-            "body": String(decoding: try jsonEncoder.encode(body), as: UTF8.self),
-            "method": "POST",
-        ]
+        do {
+            var body = body
+            body["messages"] = [message]
+            let requestInit = [
+                "body": String(decoding: try jsonEncoder.encode(body), as: UTF8.self),
+                "method": "POST",
+            ]
+            let chatReq = CFAgentUseChatRequest(id: requestId, init: requestInit)
+            let chatReqData = try jsonEncoder.encode(chatReq)
+            try await ws.send(data: chatReqData)  // make sure send succeeds before creating the task
+        } catch {
+            return .failure(.requestError(error))
+        }
 
-        let chatReq = CFAgentUseChatRequest(id: requestId, init: requestInit)
-        let chatReqData = try jsonEncoder.encode(chatReq)
-
-        return try await withCheckedThrowingContinuation { cont in
-
+        return await withCheckedContinuation { cont in
             chatTasks[requestId] = ChatTask(
                 builder: ChatMessageBuilder(),
-                resolve: { r in cont.resume(returning: r) },
-                reject: { e in cont.resume(throwing: e) }
+                resolve: { r in cont.resume(returning: .success(r)) },
+                reject: { e in cont.resume(returning: .failure(e)) }
             )
-
-            ws.send(data: chatReqData)
-            onSent()
+            onSent()  // make sure to call onSent after the task is created
         }
     }
 
-    public func call<Args: Encodable & Collection, Result: Decodable>(
+    public func call<Args: Encodable & Collection, Payload: Decodable>(
         method: String,
         args: Args,
-        resultType: Result.Type = Result.self
-    ) async throws -> Result
-    where Args.Element: Encodable, Args.Index == Int {
+        resultType: Payload.Type = Payload.self
+    ) async throws(RPCError) -> Payload where Args.Element: Encodable, Args.Index == Int {
+
+        let result = await sendCall(
+            method: method,
+            args: args,
+            resultType: resultType
+        )
+        switch result {
+        case .success(let payload): return payload
+        case .failure(let error): throw error
+        }
+    }
+
+    func sendCall<Args: Encodable & Collection, Payload: Decodable>(
+        method: String,
+        args: Args,
+        resultType: Payload.Type = Payload.self,
+        onSent: () -> Void = {}
+    ) async -> Result<Payload, RPCError> where Args.Element: Encodable, Args.Index == Int {
 
         let requestId = UUID().uuidString
-
-        let rpcReq = RPCRequest(id: requestId, method: method, args: args)
-        let rpcReqData = try jsonEncoder.encode(rpcReq)
-
-        return try await withCheckedThrowingContinuation { cont in
-
+        do {
+            let rpcReq = RPCRequest(id: requestId, method: method, args: args)
+            let rpcReqData = try jsonEncoder.encode(rpcReq)
+            try await ws.send(data: rpcReqData)  // make sure send succeeds before creating the task
+        } catch {
+            return .failure(.requestError(error))
+        }
+        return await withCheckedContinuation { cont in
             rpcTasks[requestId] = RPCTask(
-                onResolve: { r in cont.resume(returning: r) },
-                onReject: { e in cont.resume(throwing: e) }
+                onResolve: { r in cont.resume(returning: .success(r)) },
+                onReject: { e in cont.resume(returning: .failure(e)) }
             )
-
-            ws.send(data: rpcReqData)
+            onSent()  // make sure to call onSent after the task is created
         }
     }
 
@@ -212,9 +237,9 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         toolCallId toolCallIdTarget: String,
         output: AnyCodable?,
         preliminary: Bool? = nil
-    ) async throws -> ChatMessage {
+    ) async throws(ChatError) -> ChatMessage {
         guard let lastMsg = messages.last else {
-            throw AgentError.toolCallNotFound(id: toolCallIdTarget, "No messages")
+            throw .requestedToolCallNotFound
         }
 
         var found: Bool = false
@@ -246,7 +271,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         }
 
         if !found {
-            throw AgentError.toolCallNotFound(id: toolCallIdTarget)
+            throw .requestedToolCallNotFound
         }
 
         let updatedMsg = ChatMessage(
@@ -256,10 +281,14 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
             parts: updatedParts
         )
 
-        return try await sendChatRequest(
+        let result = await sendChatRequest(
             message: updatedMsg,
             onSent: { messages[messages.count - 1] = updatedMsg }
         )
+        switch result {
+        case .success(let message): return message
+        case .failure(let error): throw error
+        }
     }
 
     func upsertAssistantMessage(_ message: ChatMessage) {
@@ -270,33 +299,33 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         }
     }
 
-    public func setMessages(_ messages: [ChatMessage]) throws {
+    public func setMessages(_ messages: [ChatMessage]) async throws {
         let data = CFAgentChatMessages(messages: messages)
-        ws.send(data: try jsonEncoder.encode(data))
+        try await ws.send(data: try jsonEncoder.encode(data))
         self.messages = messages
     }
 
-    public func clearHistory() {
+    public func clearHistory() async throws {
         let data = CFAgentChatClear()
-        ws.send(data: try! jsonEncoder.encode(data))  // should be safe
+        try await ws.send(data: try jsonEncoder.encode(data))
         self.messages = []
     }
 
-    public func setState(_ state: State) throws {
+    public func setState(_ state: State) async throws {
         let data = CFAgentState(state: state)
-        ws.send(data: try jsonEncoder.encode(data))
+        try await ws.send(data: try jsonEncoder.encode(data))
         options.onClientStateUpdate?(state, self)
     }
 
-    public func cancelChatRequest(id: String) {
+    public func cancelChatRequest(id: String) async throws {
         let data = CFAgentChatRequestCancel(id: id)
-        ws.send(data: try! jsonEncoder.encode(data))  // should be safe
+        try await ws.send(data: try jsonEncoder.encode(data))
         chatTasks.removeValue(forKey: id)
     }
 
-    public func cancelAllChatRequests() {
+    public func tryCancelAllChatRequests() async {
         let ids = Array(chatTasks.keys)
-        for id in ids { cancelChatRequest(id: id) }
+        for id in ids { try? await cancelChatRequest(id: id) }
     }
 }
 
@@ -310,39 +339,44 @@ public struct AgentClientOptions<State: Codable> {
     public let headers: [String: String]?
 }
 
+public enum RPCError: Error {
+    case requestError(Error)
+    case responseError(id: String, message: String?)
+    case responseTypeMismatch(type: Decodable.Type)
+}
+
 protocol AnyRPCTask {
     func resolve(_: Codable)
-    func reject(_: Error)
+    func reject(_: RPCError)
 }
 
 struct RPCTask<Result: Decodable>: AnyRPCTask {
     let onResolve: (Result) -> Void
-    let onReject: (Error) -> Void
+    let onReject: (RPCError) -> Void
 
     func resolve(_ r: Codable) {
         do {
             onResolve(try jsonDecoder.decode(Result.self, from: try jsonEncoder.encode(r)))
         } catch {
-            onReject(AgentError.rpcResultMismatch(type: Result.self))
+            onReject(.responseTypeMismatch(type: Result.self))
         }
     }
 
-    func reject(_ e: Error) {
+    func reject(_ e: RPCError) {
         onReject(e)
     }
+}
+
+public enum ChatError: Error {
+    case requestError(Error)
+    case requestedToolCallNotFound  // addToolOutput only
+    case responseError(id: String, message: String?)
 }
 
 struct ChatTask {
     var builder: ChatMessageBuilder
     let resolve: (ChatMessage) -> Void
-    let reject: (Error) -> Void
-}
-
-public enum AgentError: Error {
-    case chatError(id: String, error: String?)
-    case toolCallNotFound(id: String, String? = nil)
-    case rpcError(id: String, error: String?)
-    case rpcResultMismatch(type: Decodable.Type)
+    let reject: (ChatError) -> Void
 }
 
 private let jsonDecoder = {
