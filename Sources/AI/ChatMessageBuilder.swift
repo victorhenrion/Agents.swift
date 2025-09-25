@@ -3,9 +3,18 @@ import KarrotCodableKit
 import OrderedCollections
 
 package struct ChatMessageBuilder {
-    private var messageId: String?
-    private var messageMetadata: AnyCodable?
+    // internal builder
+    private var id: String?
+    private var metadata: AnyCodable?
     private var parts = OrderedDictionary<String, ChatMessage.Part>()
+
+    // public info
+    package private(set) var endState: EndState? = nil
+    package enum EndState {
+        case finished
+        case aborted
+        case errored(String)
+    }
 
     package init() {}
 
@@ -62,32 +71,33 @@ package struct ChatMessageBuilder {
                     url: c.url, providerMetadata: nil))
         case .data(let c):
             parts[UUID().uuidString] = .data(.init(type: c.type, id: c.id, data: c.data))
-        case .error(let c):
-            break  // TODO: handle this
         case .startStep(_):
             parts[UUID().uuidString] = .stepStart(.init())
         case .finishStep(_):
             parts[UUID().uuidString] = .stepStart(.init())
         case .start(let c):
-            messageId = c.messageId
-            messageMetadata = c.messageMetadata
+            id = c.messageId
+            metadata = c.messageMetadata
         case .finish(let c):
-            messageMetadata = c.messageMetadata
+            metadata = c.messageMetadata
+            endState = .finished
         case .abort(_):
-            break  //TODO: handle this maybe
+            endState = .aborted
+        case .error(let c):
+            endState = .errored(c.errorText)
         case .messageMetadata(let m):
-            messageMetadata = m.messageMetadata
+            metadata = m.messageMetadata
         }
         // (no cases should be missed)
     }
 
     package func snapshot() -> ChatMessage? {
-        guard let messageId = messageId else { return nil }  // means missing start frame
+        guard let messageId = id else { return nil }  // means missing start frame
 
         return ChatMessage(
             id: messageId,
             role: .assistant,
-            metadata: messageMetadata,
+            metadata: metadata,
             parts: parts.values.elements
         )
     }
