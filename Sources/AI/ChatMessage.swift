@@ -15,7 +15,7 @@ public struct ChatMessage: Codable, Identifiable {
         case assistant
     }
 
-    public typealias Part = MessagePart
+    public typealias Part = ChatMessagePart
 
     @PolymorphicCodable(identifier: "text") @MemberwiseInit(.public)
     public struct TextPart {
@@ -51,19 +51,7 @@ public struct ChatMessage: Codable, Identifiable {
         }
     }
 
-    @PolymorphicCodable(identifier: "tool") @MemberwiseInit(.public)
-    public struct ToolPart {
-        public let type = "tool"
-        public let toolName: String
-        public let toolCallId: String
-        public let dynamic: Bool
-        public var providerExecuted: Bool?
-        public var input: AnyCodable?
-        public var callProviderMetadata: ProviderMetadata?
-        public var state: State
-
-        public typealias State = ToolState
-    }
+    public typealias ToolPart = ChatMessageToolPart
 
     @PolymorphicCodable(identifier: "source-url") @MemberwiseInit(.public)
     public struct SourceURLPart {
@@ -95,8 +83,7 @@ public struct ChatMessage: Codable, Identifiable {
 
     @PolymorphicCodable(identifier: "data") @MemberwiseInit(.public)
     public struct DataPart {
-        public let type = "data"
-        public let dataType: String
+        public let type: String  // data-{name}
         public let id: String?
         public let data: AnyCodable?
     }
@@ -109,20 +96,52 @@ public struct ChatMessage: Codable, Identifiable {
     public typealias ProviderMetadata = [String: [String: AnyCodable]]
 }
 
-@PolymorphicEnumCodable(identifierCodingKey: "type")
-public enum MessagePart {
+@PolymorphicEnumEncodable(identifierCodingKey: "type")  // EnumEncodable only, decode is custom
+public enum ChatMessagePart: Decodable {
     case text(ChatMessage.TextPart)
     case reasoning(ChatMessage.ReasoningPart)
-    case tool(ChatMessage.ToolPart)
     case sourceURL(ChatMessage.SourceURLPart)
     case sourceDocument(ChatMessage.SourceDocumentPart)
     case file(ChatMessage.FilePart)
-    case data(ChatMessage.DataPart)
     case stepStart(ChatMessage.StepStartPart)
+    case tool(ChatMessage.ToolPart)
+    case data(ChatMessage.DataPart)
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: PolymorphicMetaCodingKey.self)
+        let type = try container.decode(String.self, forKey: PolymorphicMetaCodingKey.type)
+
+        switch type {
+        case ChatMessage.TextPart.polymorphicIdentifier:
+            self = .text(try ChatMessage.TextPart(from: decoder))
+        case ChatMessage.ReasoningPart.polymorphicIdentifier:
+            self = .reasoning(try ChatMessage.ReasoningPart(from: decoder))
+        case ChatMessage.SourceURLPart.polymorphicIdentifier:
+            self = .sourceURL(try ChatMessage.SourceURLPart(from: decoder))
+        case ChatMessage.SourceDocumentPart.polymorphicIdentifier:
+            self = .sourceDocument(try ChatMessage.SourceDocumentPart(from: decoder))
+        case ChatMessage.FilePart.polymorphicIdentifier:
+            self = .file(try ChatMessage.FilePart(from: decoder))
+        case ChatMessage.StepStartPart.polymorphicIdentifier:
+            self = .stepStart(try ChatMessage.StepStartPart(from: decoder))
+        case "dynamic-tool":
+            self = .tool(try ChatMessage.ToolPart(from: decoder))
+        case type where type.hasPrefix("tool-"):
+            self = .tool(try ChatMessage.ToolPart(from: decoder))
+        case type where type.hasPrefix("data-"):
+            self = .data(try ChatMessage.DataPart(from: decoder))
+        default:
+            throw PolymorphicCodableError.unableToFindPolymorphicType(type)
+        }
+    }
+
+    enum PolymorphicMetaCodingKey: CodingKey {
+        case `type`
+    }
 }
 
-@PolymorphicEnumCodable(identifierCodingKey: "name")
-public enum ToolState {
+@PolymorphicCodable(identifier: "tool") @PolymorphicEnumCodable(identifierCodingKey: "state")
+public enum ChatMessageToolPart {
     case inputStreaming(InputStreamingState)
     case inputAvailable(InputAvailableState)
     case outputAvailable(OutputAvailableState)
@@ -130,24 +149,48 @@ public enum ToolState {
 
     @PolymorphicCodable(identifier: "input-streaming") @MemberwiseInit(.public)
     public struct InputStreamingState {
-        public let name = "input-streaming"
+        public let type: String  // tool-{name} or dynamic-tool
+        public let state = "input-streaming"
+        public let toolCallId: String
+        public let providerExecuted: Bool?
+
+        public let input: AnyCodable?
     }
 
     @PolymorphicCodable(identifier: "input-available") @MemberwiseInit(.public)
     public struct InputAvailableState {
-        public let name = "input-available"
+        public let type: String  // tool-{name} or dynamic-tool
+        public let state = "input-available"
+        public let toolCallId: String
+        public let providerExecuted: Bool?
+
+        public let input: AnyCodable
+        public let callProviderMetadata: ChatMessage.ProviderMetadata?
     }
 
     @PolymorphicCodable(identifier: "output-available") @MemberwiseInit(.public)
     public struct OutputAvailableState {
-        public let name = "output-available"
+        public let type: String  // tool-{name} or dynamic-tool
+        public let state = "output-available"
+        public let toolCallId: String
+        public let providerExecuted: Bool?
+
+        public let input: AnyCodable
+        public let callProviderMetadata: ChatMessage.ProviderMetadata?
         public let output: AnyCodable?
         public let preliminary: Bool?
     }
 
     @PolymorphicCodable(identifier: "output-error") @MemberwiseInit(.public)
     public struct OutputErrorState {
-        public let name = "output-error"
+        public let type: String  // tool-{name} or dynamic-tool
+        public let state = "output-error"
+        public let toolCallId: String
+        public let providerExecuted: Bool?
+
+        public let input: AnyCodable?
+        public let callProviderMetadata: ChatMessage.ProviderMetadata?
+        public let rawInput: AnyCodable?
         public let errorText: String
     }
 }
