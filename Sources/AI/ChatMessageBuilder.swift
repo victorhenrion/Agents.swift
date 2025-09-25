@@ -1,170 +1,239 @@
 import Foundation
 import KarrotCodableKit
+import OrderedCollections
 
 package struct ChatMessageBuilder {
-    private(set) var assistantMessageId: String?
-    private var createdAt: Date = Date()
-    private var textBuffer: String = ""
-    private var reasoningBuffer: String = ""
-    private var sources: [ChatMessage.Source] = []
-    private var toolStates: [String: PendingToolInvocation] = [:]
-    private var toolOrder: [String] = []
-    private var hasStepStart: Bool = false
-    private var finish: ChatMessageStreamFrame.FinishFrame?
-    private var dataDone: ChatMessageStreamFrame.DataDoneFrame?
-    private var lastError: String?
+    private var messageId: String?
+    private var messageMetadata: AnyCodable?
+    private var parts = OrderedDictionary<String, ChatMessage.Part>()
 
     package init() {}
 
-    package mutating func apply(frames: [ChatMessageStreamFrame]) {
-        for f in frames { apply(frame: f) }
+    package mutating func apply(chunk: ChatMessageChunk) {
+        switch chunk {
+        case .textStart(let c):
+            parts[c.id] = .text(.init(c))
+        case .textDelta(let c):
+            updateTextPart(c.id) { $0.apply(c) }
+        case .textEnd(let c):
+            updateTextPart(c.id) { $0.apply(c) }
+        case .reasoningStart(let c):
+            parts[c.id] = .reasoning(.init(c))
+        case .reasoningDelta(let c):
+            updateReasoningPart(c.id) { $0.apply(c) }
+        case .reasoningEnd(let c):
+            updateReasoningPart(c.id) { $0.apply(c) }
+        case .toolInputStart(let c):
+            parts[c.toolCallId] = c.dynamic == true ? .dynamicTool(.init(c)) : .tool(.init(c))
+        case .toolInputDelta(let c):
+            if case .dynamicTool(_) = parts[c.toolCallId] {
+                updateDynamicToolPart(c.toolCallId) { $0.apply(c) }
+            } else {
+                updateToolPart(c.toolCallId) { $0.apply(c) }
+            }
+        case .toolInputAvailable(let c):
+            parts[c.toolCallId] = c.dynamic == true ? .dynamicTool(.init(c)) : .tool(.init(c))
+        case .toolInputError(let c):
+            break  // TODO: handle this (not sure how the spec does it)
+        case .toolOutputAvailable(let c):
+            c.dynamic == true
+                ? updateDynamicToolPart(c.toolCallId) { $0.apply(c) }
+                : updateToolPart(c.toolCallId) { $0.apply(c) }
+        case .toolOutputError(let c):
+            c.dynamic == true
+                ? updateDynamicToolPart(c.toolCallId) { $0.apply(c) }
+                : updateToolPart(c.toolCallId) { $0.apply(c) }
+        case .sourceURL(let c):
+            parts[UUID().uuidString] = .sourceURL(
+                .init(
+                    sourceId: c.sourceId, url: c.url, title: c.title,
+                    providerMetadata: c.providerMetadata))
+        case .sourceDocument(let c):
+            parts[UUID().uuidString] = .sourceDocument(
+                .init(
+                    sourceId: c.sourceId, mediaType: c.mediatype, title: c.title,
+                    filename: c.filename, providerMetadata: c.providerMetadata))
+        case .file(let c):
+            parts[UUID().uuidString] = .file(
+                .init(
+                    mediaType: c.mediatype, filename: nil,  // TS types are probably wrong (nil filename?)
+                    url: c.url, providerMetadata: nil))
+        case .data(let c):
+            parts[UUID().uuidString] = .data(.init(type: c.type, id: c.id, data: c.data))
+        case .error(let c):
+            break  // TODO: handle this
+        case .startStep(_):
+            parts[UUID().uuidString] = .stepStart(.init())
+        case .finishStep(_):
+            parts[UUID().uuidString] = .stepStart(.init())
+        case .start(let c):
+            messageId = c.messageId
+            messageMetadata = c.messageMetadata
+        case .finish(let c):
+            messageMetadata = c.messageMetadata
+        case .abort(_):
+            break  //TODO: handle this maybe
+        case .messageMetadata(let m):
+            messageMetadata = m.messageMetadata
+        }
+        // (no cases should be missed)
     }
 
-    package mutating func apply(frame: ChatMessageStreamFrame) {
-        switch frame {
-        case .start(let s): handleStart(s)
-        case .text(let t): handleText(t)
-        case .reasoning(let r): handleReasoning(r)
-        case .source(let s): addSource(s)
-        case .toolCallStart(let t): handleToolStart(t)
-        case .toolCallDelta(let d): handleToolDelta(d)
-        case .toolCall(let t): handleToolCall(t)
-        case .toolResult(let r): handleToolResult(r)
-        case .finish(let f): finish = f
-        case .dataDone(let d): dataDone = d
-        case .error(let m): lastError = m
-        case .unknown(_): break
-        }
-    }
+    package func snapshot() -> ChatMessage? {
+        guard let messageId = messageId else { return nil }  // means missing start frame
 
-    package func snapshot() -> ChatMessage {
-        var parts: [ChatMessage.Part] = []
-        if hasStepStart { parts.append(.stepStart(ChatMessage.StepStartPart())) }
-        if !reasoningBuffer.isEmpty {
-            parts.append(.reasoning(ChatMessage.ReasoningPart(reasoning: reasoningBuffer)))
-        }
-        if !textBuffer.isEmpty { parts.append(.text(ChatMessage.TextPart(text: textBuffer))) }
-        parts.append(
-            contentsOf: toolOrder.compactMap { id in
-                guard let s = toolStates[id] else { return nil }
-                let inv = ChatMessage.ToolInvocation(
-                    state: s.state,
-                    toolCallId: s.toolCallId,
-                    toolName: s.toolName,
-                    args: s.args ?? AnyCodable(nil as Any?),
-                    result: s.result,
-                    step: nil
-                )
-                return .toolInvocation(ChatMessage.ToolInvocationPart(toolInvocation: inv))
-            })
-        parts.append(contentsOf: sources.map { .source(ChatMessage.SourcePart(source: $0)) })
-        let annotations: [AnyCodable] = buildAnnotations()
         return ChatMessage(
-            id: assistantMessageId ?? UUID().uuidString,
-            createdAt: createdAt,
-            experimental_attachments: [],
+            id: messageId,
             role: .assistant,
-            annotations: annotations.isEmpty ? [] : annotations,
-            parts: parts
+            metadata: messageMetadata,
+            parts: parts.values.elements
         )
     }
 
-    private func buildAnnotations() -> [AnyCodable] {
-        func pack(_ reason: String?, _ usage: ChatMessageStreamFrame.FinishFrame.Usage?)
-            -> [AnyCodable]
-        {
-            var dict: [String: Any] = [:]
-            if let reason { dict["finishReason"] = reason }
-            if let usage {
-                var u: [String: Any] = [:]
-                if let p = usage.promptTokens { u["promptTokens"] = p }
-                if let c = usage.completionTokens { u["completionTokens"] = c }
-                dict["usage"] = u
-            }
-            if let err = lastError { dict["error"] = err }
-            return dict.isEmpty ? [] : [AnyCodable(dict)]
-        }
-        if let f = finish { return pack(f.finishReason, f.usage) }
-        if let d = dataDone { return pack(d.finishReason, d.usage) }
-        if let err = lastError { return [AnyCodable(["error": err])] }
-        return []
+    private mutating func updateTextPart(
+        _ id: String, _ updater: (inout ChatMessage.TextPart) -> Void
+    ) {
+        guard case .text(var part) = parts[id] else { return }
+        updater(&part)
+        parts[id] = .text(part)
     }
 
-    // MARK: - Frame handlers
-
-    private mutating func handleStart(_ s: ChatMessageStreamFrame.StartFrame) {
-        if let mid = s.messageId { assistantMessageId = mid }
-        if let ts = s.createdAt { createdAt = ts }
-        ensureStepStarted()
+    private mutating func updateReasoningPart(
+        _ id: String, _ updater: (inout ChatMessage.ReasoningPart) -> Void
+    ) {
+        guard case .reasoning(var part) = parts[id] else { return }
+        updater(&part)
+        parts[id] = .reasoning(part)
     }
 
-    private mutating func handleText(_ t: String) {
-        ensureStepStarted()
-        textBuffer.append(t)
+    private mutating func updateToolPart(
+        _ id: String, _ updater: (inout ChatMessage.ToolPart) -> Void
+    ) {
+        guard case .tool(var part) = parts[id] else { return }
+        updater(&part)
+        parts[id] = .tool(part)
     }
 
-    private mutating func handleReasoning(_ r: ChatMessageStreamFrame.ReasoningFrame) {
-        ensureStepStarted()
-        reasoningBuffer.append(r.text)
+    private mutating func updateDynamicToolPart(
+        _ id: String, _ updater: (inout ChatMessage.DynamicToolPart) -> Void
+    ) {
+        guard case .dynamicTool(var part) = parts[id] else { return }
+        updater(&part)
+        parts[id] = .dynamicTool(part)
     }
+}
 
-    private mutating func addSource(_ s: ChatMessage.Source) { sources.append(s) }
-
-    private mutating func handleToolStart(_ t: ChatMessageStreamFrame.ToolCallStartFrame) {
-        ensureStepStarted()
-        upsertTool(t.toolCallId) { acc in
-            if let name = t.toolName { acc.toolName = name }
-            if let args = t.args { acc.args = args }
-            acc.state = .partialCall
-        }
+extension ChatMessage.TextPart {
+    init(_ chunk: ChatMessageChunk.TextStart) {
+        self.init(text: "", state: .streaming, providerMetadata: chunk.providerMetadata)
     }
-
-    private mutating func handleToolDelta(_ d: ChatMessageStreamFrame.ToolCallDeltaFrame) {
-        ensureStepStarted()
-        upsertTool(d.toolCallId) { acc in
-            if let delta = d.argsDelta { acc.args = delta }
-            acc.state = .partialCall
-        }
+    mutating func apply(_ chunk: ChatMessageChunk.TextDelta) {
+        text += chunk.delta
+        providerMetadata = chunk.providerMetadata
     }
-
-    private mutating func handleToolCall(_ t: ChatMessageStreamFrame.ToolCallFrame) {
-        ensureStepStarted()
-        upsertTool(t.toolCallId) { acc in
-            acc.toolName = t.toolName
-            acc.args = t.args
-            acc.state = .call
-        }
+    mutating func apply(_ chunk: ChatMessageChunk.TextEnd) {
+        state = .done
+        providerMetadata = chunk.providerMetadata
     }
+}
 
-    private mutating func handleToolResult(_ r: ChatMessageStreamFrame.ToolResultFrame) {
-        upsertTool(r.toolCallId) { acc in
-            acc.result = r.result
-            acc.state = .result
-        }
+extension ChatMessage.ReasoningPart {
+    init(_ chunk: ChatMessageChunk.ReasoningStart) {
+        self.init(text: "", state: .streaming, providerMetadata: chunk.providerMetadata)
     }
-
-    private mutating func ensureStepStarted() { if !hasStepStart { hasStepStart = true } }
-
-    private mutating func upsertTool(_ id: String, _ apply: (inout PendingToolInvocation) -> Void) {
-        var acc =
-            toolStates[id]
-            ?? PendingToolInvocation(
-                toolCallId: id,
-                toolName: "",
-                args: nil,
-                result: nil,
-                state: .partialCall
-            )
-        apply(&acc)
-        if toolStates[id] == nil { toolOrder.append(id) }
-        toolStates[id] = acc
+    mutating func apply(_ chunk: ChatMessageChunk.ReasoningDelta) {
+        text += chunk.delta
+        providerMetadata = chunk.providerMetadata
     }
+    mutating func apply(_ chunk: ChatMessageChunk.ReasoningEnd) {
+        providerMetadata = chunk.providerMetadata
+        state = .done
+    }
+}
 
-    private struct PendingToolInvocation {
-        var toolCallId: String
-        var toolName: String
-        var args: AnyCodable?
-        var result: AnyCodable?
-        var state: ChatMessage.ToolInvocation.State
+extension ChatMessage.ToolPart {
+    init(_ chunk: ChatMessageChunk.ToolInputStart) {
+        self.init(
+            type: "tool-\(chunk.toolName)",
+            toolCallId: chunk.toolCallId,
+            state: .inputStreaming,
+            providerExecuted: chunk.providerExecuted,
+            input: nil,
+            callProviderMetadata: nil,
+            output: nil,
+            preliminary: nil,
+            errorText: nil
+        )
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
+        input = AnyCodable(input?.value as? String ?? "" + chunk.inputTextDelta)
+    }
+    init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
+        self.init(
+            type: "tool-\(chunk.toolName)",
+            toolCallId: chunk.toolCallId,
+            state: .inputAvailable,
+            providerExecuted: chunk.providerExecuted,
+            input: chunk.input,
+            callProviderMetadata: chunk.providerMetadata,
+            output: nil,
+            preliminary: nil,
+            errorText: nil
+        )
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputAvailable) {
+        providerExecuted = chunk.providerExecuted
+        output = chunk.output
+        preliminary = chunk.preliminary
+        state = .outputAvailable
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputError) {
+        providerExecuted = chunk.providerExecuted
+        errorText = chunk.errorText
+        state = .outputError
+    }
+}
+
+// same as ToolPart, but instead of type, it has toolName (not very dry...)
+extension ChatMessage.DynamicToolPart {
+    init(_ chunk: ChatMessageChunk.ToolInputStart) {
+        self.init(
+            toolName: chunk.toolName,
+            toolCallId: chunk.toolCallId,
+            state: .inputStreaming,
+            providerExecuted: chunk.providerExecuted,
+            input: nil,
+            callProviderMetadata: nil,
+            output: nil,
+            preliminary: nil,
+            errorText: nil
+        )
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
+        input = AnyCodable(input?.value as? String ?? "" + chunk.inputTextDelta)
+    }
+    init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
+        self.init(
+            toolName: chunk.toolName,
+            toolCallId: chunk.toolCallId,
+            state: .inputAvailable,
+            providerExecuted: chunk.providerExecuted,
+            input: chunk.input,
+            callProviderMetadata: chunk.providerMetadata,
+            output: nil,
+            preliminary: nil,
+            errorText: nil
+        )
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputAvailable) {
+        providerExecuted = chunk.providerExecuted
+        output = chunk.output
+        preliminary = chunk.preliminary
+        state = .outputAvailable
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputError) {
+        providerExecuted = chunk.providerExecuted
+        errorText = chunk.errorText
+        state = .outputError
     }
 }

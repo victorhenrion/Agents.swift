@@ -57,9 +57,8 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                 options.onMcpUpdate?(msg.mcp, self)
                 return
             case .rpc(let msg):  // TODO: STREAMING SUPPORT
-                guard let task = rpcTasks[msg.id] else {
-                    return
-                }
+                guard let task = rpcTasks[msg.id] else { return }
+                //
                 guard let result = msg.result, msg.success == true else {
                     // handle error
                     task.reject(AgentError.rpcError(id: msg.id, error: msg.error))
@@ -79,26 +78,31 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                 }
                 return
             case .cf_agent_use_chat_response(let msg):  // streaming only
-                guard var task = chatTasks[msg.id] else {
-                    return
-                }
-                // Apply frames into the builder
-                for frame in ChatMessageStreamFrame.parseAll(from: msg.body) {
-                    task.builder.apply(frame: frame)
+                guard var task = chatTasks[msg.id] else { return }
+                // Apply chunks into the builder
+                for chunk in ChatMessageChunk.parseAll(from: msg.body) {
+                    task.builder.apply(chunk: chunk)
                 }
                 // Persist updated builder state
                 chatTasks[msg.id] = task
                 // Create a snapshot and update local messages list
-                let snapshot = task.builder.snapshot()
+                guard let snapshot = task.builder.snapshot() else { return }
                 upsertAssistantMessage(snapshot)
                 // Handle completion
                 if msg.done == true {
                     task.resolve(snapshot)
                     chatTasks.removeValue(forKey: msg.id)
                     // advertise tool calls
-                    for p in snapshot.parts {
-                        if case .toolInvocation(let p) = p, p.toolInvocation.state == .call {
-                            options.onToolCall?(p.toolInvocation, self)
+                    for part in snapshot.parts {
+                        if case .tool(let toolPart) = part,
+                            case .inputAvailable = toolPart.state
+                        {
+                            options.onToolCall?(toolPart, self)
+                        }
+                        if case .dynamicTool(let toolPart) = part,
+                            case .inputAvailable = toolPart.state
+                        {
+                            options.onDynamicToolCall?(toolPart, self)
                         }
                     }
                 }
@@ -134,7 +138,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     }
 
     public func sendMessage(
-        message: ChatMessage,
+        _ message: ChatMessage,
         body: [String: AnyEncodable] = [:]
     ) async throws -> ChatMessage {
         return try await sendChatRequest(
@@ -198,48 +202,51 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
         }
     }
 
-    public func addToolResult(
-        toolCallId: String,
-        result: AnyCodable?
+    public func addToolOutput(
+        toolCallId toolCallIdTarget: String,
+        output: AnyCodable?,
+        preliminary: Bool? = nil
     ) async throws -> ChatMessage {
         guard let lastMsg = messages.last else {
-            throw AgentError.toolCallNotFound(id: toolCallId, "No messages")
+            throw AgentError.toolCallNotFound(id: toolCallIdTarget, "No messages")
         }
 
         var found: Bool = false
 
         let updatedParts = lastMsg.parts.map { part in
             switch part {
-            case .toolInvocation(let part) where part.toolInvocation.toolCallId == toolCallId:
-                found = true
-                let prev = part.toolInvocation
-                return ChatMessage.Part.toolInvocation(
-                    .init(
-                        toolInvocation: .init(
-                            state: .result,
-                            toolCallId: prev.toolCallId,
-                            toolName: prev.toolName,
-                            args: prev.args,
-                            result: result,
-                            step: prev.step,
-                        )
-                    )
-                )
+            case .tool(let toolPart) where toolPart.toolCallId == toolCallIdTarget:
+                if case .inputAvailable = toolPart.state {
+                    found = true
+                    var new = toolPart
+                    new.output = output
+                    new.preliminary = preliminary
+                    new.state = .outputAvailable
+                    return ChatMessage.Part.tool(new)
+                }
+            case .dynamicTool(let toolPart) where toolPart.toolCallId == toolCallIdTarget:
+                if case .inputAvailable = toolPart.state {
+                    found = true
+                    var new = toolPart
+                    new.output = output
+                    new.preliminary = preliminary
+                    new.state = .outputAvailable
+                    return ChatMessage.Part.dynamicTool(new)
+                }
             default:
-                return part
+                break
             }
+            return part
         }
 
         if !found {
-            throw AgentError.toolCallNotFound(id: toolCallId)
+            throw AgentError.toolCallNotFound(id: toolCallIdTarget)
         }
 
         let updatedMsg = ChatMessage(
             id: lastMsg.id,
-            createdAt: lastMsg.createdAt,
-            experimental_attachments: lastMsg.experimental_attachments,
             role: lastMsg.role,
-            annotations: lastMsg.annotations,
+            metadata: lastMsg.metadata,
             parts: updatedParts
         )
 
@@ -289,7 +296,8 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
 
 @MemberwiseInit(.public)
 public struct AgentClientOptions<State: Codable> {
-    public let onToolCall: ((ChatMessage.ToolInvocation, AgentClient<State>) -> Void)?
+    public let onToolCall: ((ChatMessage.ToolPart, AgentClient<State>) -> Void)?
+    public let onDynamicToolCall: ((ChatMessage.DynamicToolPart, AgentClient<State>) -> Void)?
     public let onClientStateUpdate: ((State, AgentClient<State>) -> Void)?
     public let onServerStateUpdate: ((State, AgentClient<State>) -> Void)?
     public let onMcpUpdate: ((MCPServersState, AgentClient<State>) -> Void)?

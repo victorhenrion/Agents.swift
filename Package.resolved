@@ -1,13 +1,21 @@
 {
-  "originHash" : "4ae8faedd3fd0459a21165d44fc0f183edc6bce90be1dfff834e5bd84ce52fc5",
   "pins" : [
     {
       "identity" : "karrotcodablekit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/daangn/KarrotCodableKit.git",
       "state" : {
-        "revision" : "35692d880982ba610b38ecf794fe1b8e1cef5b44",
-        "version" : "1.4.0"
+        "revision" : "c82af3c5aa39d67d50a698eaed0171107223be4d",
+        "version" : "1.6.0"
+      }
+    },
+    {
+      "identity" : "swift-collections",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-collections.git",
+      "state" : {
+        "revision" : "8c0c0a8b49e080e54e5e328cc552821ff07cd341",
+        "version" : "1.2.1"
       }
     },
     {
@@ -29,5 +37,5 @@
       }
     }
   ],
-  "version" : 3
+  "version" : 2
 }
