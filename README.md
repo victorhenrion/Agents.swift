@@ -64,16 +64,9 @@ func helloWorld() async {
     client.setState(AppState(userId: "123"))
 
     // Send a user message
-    let userMessage = ChatMessage(
-        id: UUID().uuidString,
-        createdAt: Date(),
-        role: .user,
-        annotations: [],
-        parts: [ .text(.init(text: "Hello, agent!")) ]
-    )
-
     do {
-        let response = try await client.sendMessage(message: userMessage)
+        let parts: [ChatMessage.Part] = [.text(.init(text: content))]
+        let response = try await client.sendMessage(.init(parts))
         print("Response:", response)
     } catch {
         print("Error:", error)

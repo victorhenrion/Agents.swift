@@ -138,7 +138,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
     }
 
     public func sendMessage(
-        message: ChatMessage,
+        _ message: ChatMessage,
         body: [String: AnyEncodable] = [:]
     ) async throws -> ChatMessage {
         return try await sendChatRequest(

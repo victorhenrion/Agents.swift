@@ -9,6 +9,14 @@ public struct ChatMessage: Codable, Identifiable {
     public let metadata: AnyCodable?
     public let parts: [Part]
 
+    // user message shorthand
+    public init(_ parts: [Part]) {
+        self.id = "user_\(UUID().uuidString)"
+        self.role = .user
+        self.metadata = nil
+        self.parts = parts
+    }
+
     public enum Role: String, Codable {
         case system
         case user
