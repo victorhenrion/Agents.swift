@@ -79,6 +79,12 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                 return
             case .cf_agent_use_chat_response(let msg):  // streaming only
                 guard var task = chatTasks[msg.id] else { return }
+                // Handle error (before parsing body, since it contains the error)
+                if msg.error == true {
+                    task.reject(AgentError.chatError(id: msg.id, error: msg.body))
+                    chatTasks.removeValue(forKey: msg.id)
+                    return
+                }
                 // Apply chunks into the builder
                 for chunk in ChatMessageChunk.parseAll(from: msg.body) {
                     task.builder.apply(chunk: chunk)
@@ -333,6 +339,7 @@ struct ChatTask {
 }
 
 public enum AgentError: Error {
+    case chatError(id: String, error: String?)
     case toolCallNotFound(id: String, String? = nil)
     case rpcError(id: String, error: String?)
     case rpcResultMismatch(type: Decodable.Type)

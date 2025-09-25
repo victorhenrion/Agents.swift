@@ -75,6 +75,7 @@ struct CFAgentUseChatResponse {
     let id: String
     let body: String
     let done: Bool?
+    let error: Bool?
 }
 
 @PolymorphicDecodable(identifier: "rpc")
