@@ -95,7 +95,7 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
                     // advertise tool calls
                     for part in snapshot.parts {
                         if case .tool(let toolPart) = part {
-                            if case .inputAvailable(_) = toolPart.state {
+                            if case .inputAvailable = toolPart.state {
                                 options.onToolCall?(toolPart, self)
                             }
                         }
@@ -212,10 +212,11 @@ public class AgentClient<State: Codable>: WebSocketConnectionDelegate {
             switch part {
             case .tool(let toolPart) where toolPart.toolCallId == toolCallIdTarget:
                 switch toolPart.state {
-                case .inputAvailable(_):
+                case .inputAvailable:
                     found = true
                     var new = toolPart
-                    new.state = .outputAvailable(.init(output: output, preliminary: preliminary))
+                    new.output = output
+                    new.state = .outputAvailable
                     return ChatMessage.Part.tool(new)
                 default:
                     return part

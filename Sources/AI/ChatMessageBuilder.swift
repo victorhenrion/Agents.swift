@@ -24,17 +24,25 @@ package struct ChatMessageBuilder {
         case .reasoningEnd(let c):
             updateReasoningPart(c.id) { $0.apply(c) }
         case .toolInputStart(let c):
-            parts[c.toolCallId] = .tool(.init(c))
+            parts[c.toolCallId] = c.dynamic == true ? .dynamicTool(.init(c)) : .tool(.init(c))
         case .toolInputDelta(let c):
-            updateToolPart(c.toolCallId) { $0.apply(c) }
+            if case .dynamicTool(_) = parts[c.toolCallId] {
+                updateDynamicToolPart(c.toolCallId) { $0.apply(c) }
+            } else {
+                updateToolPart(c.toolCallId) { $0.apply(c) }
+            }
         case .toolInputAvailable(let c):
-            parts[c.toolCallId] = .tool(.init(c))
+            parts[c.toolCallId] = c.dynamic == true ? .dynamicTool(.init(c)) : .tool(.init(c))
         case .toolInputError(let c):
             break  // TODO: handle this (not sure how the spec does it)
         case .toolOutputAvailable(let c):
-            updateToolPart(c.toolCallId) { $0.apply(c) }
+            c.dynamic == true
+                ? updateDynamicToolPart(c.toolCallId) { $0.apply(c) }
+                : updateToolPart(c.toolCallId) { $0.apply(c) }
         case .toolOutputError(let c):
-            updateToolPart(c.toolCallId) { $0.apply(c) }
+            c.dynamic == true
+                ? updateDynamicToolPart(c.toolCallId) { $0.apply(c) }
+                : updateToolPart(c.toolCallId) { $0.apply(c) }
         case .sourceURL(let c):
             parts[UUID().uuidString] = .sourceURL(
                 .init(
@@ -105,6 +113,14 @@ package struct ChatMessageBuilder {
         updater(&part)
         parts[id] = .tool(part)
     }
+
+    private mutating func updateDynamicToolPart(
+        _ id: String, _ updater: (inout ChatMessage.DynamicToolPart) -> Void
+    ) {
+        guard case .dynamicTool(var part) = parts[id] else { return }
+        updater(&part)
+        parts[id] = .dynamicTool(part)
+    }
 }
 
 extension ChatMessage.TextPart {
@@ -155,6 +171,50 @@ extension ChatMessage.ToolPart {
     init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
         self.init(
             type: "tool-\(chunk.toolName)",
+            toolCallId: chunk.toolCallId,
+            state: .inputAvailable,
+            providerExecuted: chunk.providerExecuted,
+            input: chunk.input,
+            callProviderMetadata: chunk.providerMetadata,
+            output: nil,
+            preliminary: nil,
+            errorText: nil
+        )
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputAvailable) {
+        providerExecuted = chunk.providerExecuted
+        output = chunk.output
+        preliminary = chunk.preliminary
+        state = .outputAvailable
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolOutputError) {
+        providerExecuted = chunk.providerExecuted
+        errorText = chunk.errorText
+        state = .outputError
+    }
+}
+
+// same as ToolPart, but instead of type, it has toolName (not very dry...)
+extension ChatMessage.DynamicToolPart {
+    init(_ chunk: ChatMessageChunk.ToolInputStart) {
+        self.init(
+            toolName: chunk.toolName,
+            toolCallId: chunk.toolCallId,
+            state: .inputStreaming,
+            providerExecuted: chunk.providerExecuted,
+            input: nil,
+            callProviderMetadata: nil,
+            output: nil,
+            preliminary: nil,
+            errorText: nil
+        )
+    }
+    mutating func apply(_ chunk: ChatMessageChunk.ToolInputDelta) {
+        input = AnyCodable(input?.value as? String ?? "" + chunk.inputTextDelta)
+    }
+    init(_ chunk: ChatMessageChunk.ToolInputAvailable) {
+        self.init(
+            toolName: chunk.toolName,
             toolCallId: chunk.toolCallId,
             state: .inputAvailable,
             providerExecuted: chunk.providerExecuted,
