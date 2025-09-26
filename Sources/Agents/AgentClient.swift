@@ -42,8 +42,16 @@ public class AgentClient: WebSocketClient.Delegate {
             url: instanceURL.replacingInScheme("ws", with: "http").appending(path: "get-messages")
         ).addingHeaders(latestHeaders ?? self.headers)
 
-        let (data, _) = try await URLSession.shared.data(for: urlRequest)
-        self.messages = try jsonDecoder.decode([ChatMessage].self, from: data)
+        for attempt in 0...3 {
+            do {
+                let (data, _) = try await URLSession.shared.data(for: urlRequest)
+                self.messages = try jsonDecoder.decode([ChatMessage].self, from: data)
+                return
+            } catch {
+                if attempt == 3 { throw error }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 
     func onMessage(text: String) {
@@ -141,10 +149,21 @@ public class AgentClient: WebSocketClient.Delegate {
 
     func onDisconnected(error: Error?) {
         connected = false
+        delegate?.onDisconnected(error, self)
     }
 
-    func onError(error: Error) {  // todo
-        print("AgentClient: onError \(error)")
+    public func reconnect(
+        every: Duration = .seconds(1.5),
+        getHeaders: (() async -> [String: String])? = nil
+    ) async -> Bool {
+        func getURLRequest() async -> URLRequest {
+            let headers = (await getHeaders?()) ?? self.headers
+            return URLRequest(url: instanceURL.replacingInScheme("http", with: "ws"))
+                .addingHeaders(headers)
+        }
+        let res = await ws.reconnect(every: every, retries: Int.max, getURLRequest: getURLRequest)
+        if res { try? await loadInitialMessages(headers: await getHeaders?()) }  // todo: what if this fails?
+        return res
     }
 
     public func sendMessage(
@@ -336,6 +355,7 @@ public class AgentClient: WebSocketClient.Delegate {
         func onClientStateUpdate<State: Codable>(_: State, _: AgentClient)
         func onServerStateUpdate<State: Codable>(_: State, _: AgentClient)
         func onMcpUpdate(_: MCPServersState, _: AgentClient)
+        func onDisconnected(_: Error?, _: AgentClient)
     }
 }
 

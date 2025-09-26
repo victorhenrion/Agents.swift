@@ -3,13 +3,14 @@ import Foundation
 class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
     // config
     let delegate: Delegate
-    let urlRequest: URLRequest
     let messageFormat: MessageFormat
     let textEncoding: String.Encoding
     // state
     let urlSessionQueue = OperationQueue()
-    var urlSession: URLSession!
-    var webSocketTask: URLSessionWebSocketTask!
+    private(set) var urlSession: URLSession!
+    private(set) var webSocketTask: URLSessionWebSocketTask!
+    private(set) var reconnectTask: Task<Bool, Never>?
+    private(set) var isOpen: Bool = false
 
     init(
         delegate: Delegate,
@@ -18,13 +19,12 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         textEncoding: String.Encoding = .utf8
     ) {
         self.delegate = delegate
-        self.urlRequest = urlRequest
         self.messageFormat = messageFormat
         self.textEncoding = textEncoding
         super.init()
         self.urlSession = URLSession(
             configuration: .default, delegate: self, delegateQueue: self.urlSessionQueue)
-        self.webSocketTask = self.urlSession.webSocketTask(with: self.urlRequest)
+        self.webSocketTask = self.urlSession.webSocketTask(with: urlRequest)
     }
 
     func urlSession(
@@ -32,6 +32,7 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         webSocketTask: URLSessionWebSocketTask,
         didOpenWithProtocol `protocol`: String?
     ) {
+        self.isOpen = true
         self.delegate.onConnected()
     }
 
@@ -41,12 +42,49 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?
     ) {
+        self.isOpen = false
         self.delegate.onDisconnected(error: nil)
     }
 
-    func reconnect(urlRequest urlRequestNew: URLRequest? = nil) {
-        self.webSocketTask = self.urlSession.webSocketTask(with: urlRequestNew ?? urlRequest)
-        self.connect()
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        self.isOpen = false
+        self.delegate.onDisconnected(error: error)
+    }
+
+    // bad because we recreate a connection with each retry and always wait for the whole duration, but good enough for now
+    public func reconnect(
+        every: Duration,
+        retries maxRetries: Int,
+        getURLRequest: @escaping () async -> URLRequest
+    ) async -> Bool {
+        // already connected
+        if self.isOpen { return true }
+        // reconnect already in progress
+        if let task = reconnectTask, !task.isCancelled { return await task.value }
+        // start task
+        self.reconnectTask?.cancel()
+        let task = Task<Bool, Never> { @MainActor in
+            defer { self.reconnectTask = nil }
+            for _ in 0..<maxRetries {
+                // connected or cancelled
+                if self.isOpen || Task.isCancelled { break }
+                // reconnect
+                self.webSocketTask.cancel(with: .goingAway, reason: nil)
+                self.webSocketTask = self.urlSession.webSocketTask(with: await getURLRequest())
+                self.isOpen = false  // ensure it didn't change in the meantime
+                self.connect()
+                // wait
+                try? await Task.sleep(for: every)
+            }
+            return self.isOpen
+        }
+        // set task and return promise
+        self.reconnectTask = task
+        return await task.value
     }
 
     func connect() {
@@ -63,7 +101,8 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
             guard let self = self else { return }
             switch result {
             case .failure(let error):
-                self.delegate.onError(error: error)
+                self.isOpen = false
+                self.delegate.onDisconnected(error: error)
 
             case .success(let message):
                 switch message {
@@ -141,7 +180,6 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
     protocol Delegate {
         func onConnected()
         func onDisconnected(error: Error?)
-        func onError(error: Error)
         func onMessage(text: String)
         func onMessage(data: Data)
     }
