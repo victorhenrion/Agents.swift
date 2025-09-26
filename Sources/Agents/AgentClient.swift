@@ -8,37 +8,41 @@ import MemberwiseInit
 // todo: handle task timeout
 // todo: implement cancel message (?)
 @Observable
-public class AgentClient<State: Codable>: WebSocketClient.Delegate {
+public class AgentClient: WebSocketClient.Delegate {
+    // config
     private let instanceURL: URL
-    private var ws: WebSocketClient
-    private let options: AgentClientOptions<State>
+    private let headers: [String: String]?
+    private let delegate: Delegate?
+    private var ws: WebSocketClient!
+    // state
+    public private(set) var connected: Bool = false
+    public private(set) var messages: [ChatMessage] = []
     private var chatTasks: [String: ChatTask] = [:]
     private var rpcTasks: [String: AnyRPCTask] = [:]
-    public private(set) var messages: [ChatMessage] = []
-    public private(set) var connected: Bool = false
 
-    public init(instanceURL: URL, options: AgentClientOptions<State>) {
+    public init(instanceURL: URL, headers: [String: String]? = nil, delegate: Delegate? = nil) {
         self.instanceURL = instanceURL
-        self.options = options
+        self.headers = headers
+        self.delegate = delegate
+
+        let urlRequest = URLRequest(
+            url: instanceURL.replacingInScheme("http", with: "ws")
+        ).addingHeaders(headers)
 
         self.ws = WebSocketClient(
-            url: instanceURL, headers: options.headers, messageFormat: .text
-        )
-        ws.delegate = self
+            delegate: self,
+            urlRequest: urlRequest,
+            messageFormat: .text)
 
-        ws.connect()
+        self.ws.connect()
     }
 
-    public func loadInitialMessages() async throws {
-        let url = self.instanceURL.appending(path: "get-messages")
+    public func loadInitialMessages(headers latestHeaders: [String: String]? = nil) async throws {
+        let urlRequest = URLRequest(
+            url: instanceURL.replacingInScheme("ws", with: "http").appending(path: "get-messages")
+        ).addingHeaders(latestHeaders ?? self.headers)
 
-        var request = URLRequest(url: url)
-        if let headers = options.headers {
-            for (key, value) in headers {
-                request.addValue(value, forHTTPHeaderField: key)
-            }
-        }
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await URLSession.shared.data(for: urlRequest)
         self.messages = try jsonDecoder.decode([ChatMessage].self, from: data)
     }
 
@@ -53,12 +57,10 @@ public class AgentClient<State: Codable>: WebSocketClient.Delegate {
 
         switch incomingMessage {
         case .cf_agent_state(let msg):
-            if let state = msg.state as? State {
-                options.onServerStateUpdate?(state, self)
-            }  // fails silently
+            delegate?.onServerStateUpdate(msg.state, self)
             return
         case .cf_agent_mcp_servers(let msg):
-            options.onMcpUpdate?(msg.mcp, self)
+            delegate?.onMcpUpdate(msg.mcp, self)
             return
         case .rpc(let msg):  // TODO: STREAMING SUPPORT
             guard let task = rpcTasks[msg.id] else { return }
@@ -107,12 +109,12 @@ public class AgentClient<State: Codable>: WebSocketClient.Delegate {
                     if case .tool(let toolPart) = part,
                         case .inputAvailable = toolPart.state
                     {
-                        options.onToolCall?(toolPart, self)
+                        delegate?.onToolCall(toolPart, self)
                     }
                     if case .dynamicTool(let toolPart) = part,
                         case .inputAvailable = toolPart.state
                     {
-                        options.onDynamicToolCall?(toolPart, self)
+                        delegate?.onDynamicToolCall(toolPart, self)
                     }
                 }
             }
@@ -311,10 +313,10 @@ public class AgentClient<State: Codable>: WebSocketClient.Delegate {
         self.messages = []
     }
 
-    public func setState(_ state: State) async throws {
+    public func setState<State: Codable>(_ state: State) async throws {
         let data = CFAgentState(state: state)
         try await ws.send(data: try jsonEncoder.encode(data))
-        options.onClientStateUpdate?(state, self)
+        delegate?.onClientStateUpdate(state, self)
     }
 
     public func cancelChatRequest(id: String) async throws {
@@ -327,16 +329,14 @@ public class AgentClient<State: Codable>: WebSocketClient.Delegate {
         let ids = Array(chatTasks.keys)
         for id in ids { try? await cancelChatRequest(id: id) }
     }
-}
 
-@MemberwiseInit(.public)
-public struct AgentClientOptions<State: Codable> {
-    public let onToolCall: ((ChatMessage.ToolPart, AgentClient<State>) -> Void)?
-    public let onDynamicToolCall: ((ChatMessage.DynamicToolPart, AgentClient<State>) -> Void)?
-    public let onClientStateUpdate: ((State, AgentClient<State>) -> Void)?
-    public let onServerStateUpdate: ((State, AgentClient<State>) -> Void)?
-    public let onMcpUpdate: ((MCPServersState, AgentClient<State>) -> Void)?
-    public let headers: [String: String]?
+    public protocol Delegate {
+        func onToolCall(_: ChatMessage.ToolPart, _: AgentClient)
+        func onDynamicToolCall(_: ChatMessage.DynamicToolPart, _: AgentClient)
+        func onClientStateUpdate<State: Codable>(_: State, _: AgentClient)
+        func onServerStateUpdate<State: Codable>(_: State, _: AgentClient)
+        func onMcpUpdate(_: MCPServersState, _: AgentClient)
+    }
 }
 
 public enum RPCError: Error {
@@ -377,6 +377,25 @@ struct ChatTask {
     var builder: ChatMessageBuilder
     let resolve: (ChatMessage) -> Void
     let reject: (ChatError) -> Void
+}
+
+extension URL {
+    fileprivate func replacingInScheme(_ of: String, with: String) -> URL {
+        guard var comps = URLComponents(url: self, resolvingAgainstBaseURL: false)
+        else { return self }
+        comps.scheme = comps.scheme?.replacingOccurrences(of: of, with: with)
+        return comps.url ?? self
+    }
+}
+
+extension URLRequest {
+    fileprivate func addingHeaders(_ dict: [String: String]?) -> URLRequest {
+        var req = self
+        for (key, value) in dict ?? [:] {
+            req.addValue(value, forHTTPHeaderField: key)
+        }
+        return req
+    }
 }
 
 private let jsonDecoder = {

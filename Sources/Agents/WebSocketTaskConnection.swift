@@ -1,57 +1,30 @@
 import Foundation
 
 class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
-
-    protocol Delegate {
-        func onConnected()
-        func onDisconnected(error: Error?)
-        func onError(error: Error)
-        func onMessage(text: String)
-        func onMessage(data: Data)
-    }
-
-    enum MessageFormat {
-        case preserve  // default: preserve frame type (text stays text, data stays data)
-        case text  // force both directions to be text frames
-        case binary  // force both directions to be binary frames
-    }
-
-    var delegate: Delegate!
-    let delegateQueue = OperationQueue()
+    // config
+    let delegate: Delegate
+    let urlRequest: URLRequest
+    let messageFormat: MessageFormat
+    let textEncoding: String.Encoding
+    // state
+    let urlSessionQueue = OperationQueue()
     var urlSession: URLSession!
     var webSocketTask: URLSessionWebSocketTask!
-    var messageFormat: MessageFormat
-    var textEncoding: String.Encoding
-    var state: URLSessionTask.State = .suspended
 
     init(
-        url inputURL: URL,
-        headers: [String: String]? = nil,
+        delegate: Delegate,
+        urlRequest: URLRequest,
         messageFormat: MessageFormat = .preserve,
         textEncoding: String.Encoding = .utf8
     ) {
-        let url = {
-            guard var c = URLComponents(url: inputURL, resolvingAgainstBaseURL: false)
-            else { return inputURL }
-            c.scheme = c.scheme?.replacingOccurrences(of: "http", with: "ws")
-            return c.url ?? inputURL
-        }()
-
+        self.delegate = delegate
+        self.urlRequest = urlRequest
         self.messageFormat = messageFormat
         self.textEncoding = textEncoding
         super.init()
         self.urlSession = URLSession(
-            configuration: .default, delegate: self, delegateQueue: self.delegateQueue)
-
-        if let headers = headers, !headers.isEmpty {
-            var request = URLRequest(url: url)
-            for (key, value) in headers {
-                request.addValue(value, forHTTPHeaderField: key)
-            }
-            self.webSocketTask = self.urlSession.webSocketTask(with: request)
-        } else {
-            self.webSocketTask = self.urlSession.webSocketTask(with: url)
-        }
+            configuration: .default, delegate: self, delegateQueue: self.urlSessionQueue)
+        self.webSocketTask = self.urlSession.webSocketTask(with: self.urlRequest)
     }
 
     func urlSession(
@@ -59,7 +32,6 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         webSocketTask: URLSessionWebSocketTask,
         didOpenWithProtocol `protocol`: String?
     ) {
-        self.state = webSocketTask.state
         self.delegate.onConnected()
     }
 
@@ -69,8 +41,12 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?
     ) {
-        self.state = webSocketTask.state
         self.delegate.onDisconnected(error: nil)
+    }
+
+    func reconnect(urlRequest urlRequestNew: URLRequest? = nil) {
+        self.webSocketTask = self.urlSession.webSocketTask(with: urlRequestNew ?? urlRequest)
+        self.connect()
     }
 
     func connect() {
@@ -160,5 +136,19 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
                 }
             }
         }
+    }
+
+    protocol Delegate {
+        func onConnected()
+        func onDisconnected(error: Error?)
+        func onError(error: Error)
+        func onMessage(text: String)
+        func onMessage(data: Data)
+    }
+
+    enum MessageFormat {
+        case preserve  // default: preserve frame type (text stays text, data stays data)
+        case text  // force both directions to be text frames
+        case binary  // force both directions to be binary frames
     }
 }
