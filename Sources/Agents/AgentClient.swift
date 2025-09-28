@@ -169,7 +169,7 @@ public class AgentClient: WebSocketClient.Delegate {
     public func sendMessage(
         _ message: ChatMessage,
         body: [String: AnyEncodable] = [:]
-    ) async throws -> ChatMessage {
+    ) async throws(ChatError) -> ChatMessage {
 
         let result = await sendChatRequest(
             message: message,
