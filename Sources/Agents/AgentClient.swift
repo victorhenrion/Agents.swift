@@ -349,10 +349,6 @@ public class AgentClient: WebSocketClient.Delegate {
         for id in ids { try? await cancelChatRequest(id: id) }
     }
 
-    public func clientRollback(count: Int) {
-        messages.removeLast(count)
-    }
-
     public protocol Delegate {
         func onToolCall(_: ChatMessage.ToolPart, _: AgentClient)
         func onDynamicToolCall(_: ChatMessage.DynamicToolPart, _: AgentClient)
