@@ -17,6 +17,7 @@ public class AgentClient: WebSocketClient.Delegate {
     // state
     public private(set) var connected: Bool = false
     public private(set) var messages: [ChatMessage] = []
+    public var failedMessages: [ChatMessage] = []
     private var chatTasks: [String: ChatTask] = [:]
     private var rpcTasks: [String: AnyRPCTask] = [:]
 
@@ -99,16 +100,33 @@ public class AgentClient: WebSocketClient.Delegate {
             }
             // Persist updated builder state
             chatTasks[msg.id] = task
-            // Create a snapshot and update local messages list
-            guard let snapshot = task.builder.snapshot() else { return }
-            upsertMessages([snapshot])
-            // Handle completion
-            if task.builder.done {
-                if task.builder.error != nil {
+
+            if !task.builder.done {
+                // update the message as it streams
+                if let snapshot = task.builder.snapshot() {
+                    upsertMessages([snapshot])
+                }
+            } else {  // done
+                if task.builder.error != nil {  // if error
+                    // remove the failed reponse snapshot if it exists
+                    if let snapshot = task.builder.snapshot() {
+                        self.messages.removeAll(where: { $0.id == snapshot.id })
+                    }
+                    // move the faulty request message to failedMessages
+                    if let failedMsgIdx = self.messages.firstIndex(where: { $0.id == msg.id }) {
+                        let failedMsg = self.messages.remove(at: failedMsgIdx)
+                        self.failedMessages.append(failedMsg)
+                    }
                     // reject task
                     task.reject(.responseError(id: msg.id, message: msg.body))
                     chatTasks.removeValue(forKey: msg.id)
-                } else {
+                } else {  // no error
+                    // build the final snapshot
+                    guard let snapshot = task.builder.snapshot() else {
+                        return print("AgentClient: failed to build snapshot for message: \(msg.id)")  // very unlikely; don't bother handling it
+                    }
+                    // update the message to its final snapshot
+                    upsertMessages([snapshot])
                     // resolve task
                     task.resolve(snapshot)
                     chatTasks.removeValue(forKey: msg.id)
@@ -191,7 +209,6 @@ public class AgentClient: WebSocketClient.Delegate {
         onSent: () -> Void = {}
     ) async -> Result<ChatMessage, ChatError> {  // throws for send errors, returns failure for response errors
 
-        let requestId = UUID().uuidString
         do {
             var body = body
             body["messages"] = [message]
@@ -199,7 +216,7 @@ public class AgentClient: WebSocketClient.Delegate {
                 "body": String(decoding: try jsonEncoder.encode(body), as: UTF8.self),
                 "method": "POST",
             ]
-            let chatReq = CFAgentUseChatRequest(id: requestId, init: requestInit)
+            let chatReq = CFAgentUseChatRequest(id: message.id, init: requestInit)
             let chatReqData = try jsonEncoder.encode(chatReq)
             try await ws.send(data: chatReqData)  // make sure send succeeds before creating the task
         } catch {
@@ -207,7 +224,7 @@ public class AgentClient: WebSocketClient.Delegate {
         }
 
         return await withCheckedContinuation { cont in
-            chatTasks[requestId] = ChatTask(
+            chatTasks[message.id] = ChatTask(
                 builder: ChatMessageBuilder(),
                 resolve: { r in cont.resume(returning: .success(r)) },
                 reject: { e in cont.resume(returning: .failure(e)) }
@@ -325,6 +342,14 @@ public class AgentClient: WebSocketClient.Delegate {
         }
         newMessages.append(contentsOf: incoming)  // concat brand new incoming messages
         self.messages = newMessages
+    }
+
+    func upsertFailedMessage(_ incoming: ChatMessage) {
+        if let idx = self.failedMessages.firstIndex(where: { $0.id == incoming.id }) {
+            self.failedMessages[idx] = incoming
+        } else {
+            self.failedMessages.append(incoming)
+        }
     }
 
     public func clearHistory() async throws {
