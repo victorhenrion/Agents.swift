@@ -167,9 +167,11 @@ public class AgentClient: WebSocketClient.Delegate {
     }
 
     public func sendMessage(
-        _ message: ChatMessage,
+        _ parts: [ChatMessage.Part],
         body: [String: AnyEncodable] = [:]
     ) async throws(ChatError) -> ChatMessage {
+        let messageId = "user_\(UUID().uuidString)"
+        let message = ChatMessage(id: messageId, role: .user, metadata: nil, parts: parts)
 
         let result = await sendChatRequest(
             message: message,
@@ -309,14 +311,6 @@ public class AgentClient: WebSocketClient.Delegate {
         switch result {
         case .success(let message): return message
         case .failure(let error): throw error
-        }
-    }
-
-    func upsertAssistantMessage(_ message: ChatMessage) {
-        if let idx = messages.firstIndex(where: { $0.id == message.id }) {
-            messages[idx] = message
-        } else {
-            messages.append(message)
         }
     }
 
