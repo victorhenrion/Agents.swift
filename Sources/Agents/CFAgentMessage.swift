@@ -8,12 +8,6 @@ struct CFAgentChatClear {
     let type = "cf_agent_chat_clear"
 }
 
-@PolymorphicCodable(identifier: "cf_agent_chat_messages")
-struct CFAgentChatMessages {
-    let type = "cf_agent_chat_messages"
-    let messages: [ChatMessage]
-}
-
 @PolymorphicCodable(identifier: "cf_agent_mcp_servers")
 struct CFAgentMcpServers {
     let type = "cf_agent_mcp_servers"
@@ -69,6 +63,12 @@ enum IncomingMessage {
     case rpc(RPCResponse<AnyCodable>)
 }
 
+@PolymorphicDecodable(identifier: "cf_agent_chat_messages")
+struct CFAgentChatMessages {
+    let type = "cf_agent_chat_messages"
+    let messages: [ChatMessage]
+}
+
 @PolymorphicDecodable(identifier: "cf_agent_use_chat_response")
 struct CFAgentUseChatResponse {
     let type = "cf_agent_use_chat_response"
@@ -93,7 +93,6 @@ struct RPCResponse<Result: Codable> {
 @PolymorphicEnumEncodable(identifierCodingKey: "type")
 enum OutgoingMessage {
     case cf_agent_chat_clear(CFAgentChatClear)
-    case cf_agent_chat_messages(CFAgentChatMessages)
     case cf_agent_chat_request_cancel(CFAgentChatRequestCancel)
     case cf_agent_mcp_servers(CFAgentMcpServers)
     case cf_agent_state(CFAgentState<AnyCodable>)

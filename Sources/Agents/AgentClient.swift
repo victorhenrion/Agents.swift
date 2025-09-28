@@ -131,7 +131,9 @@ public class AgentClient: WebSocketClient.Delegate {
             self.messages = []
             return
         case .cf_agent_chat_messages(let msg):
-            self.messages = msg.messages
+            for m in msg.messages {
+                upsertAssistantMessage(m)
+            }
             return
         @unknown default:
             print("AgentClient: unknown type for incoming message: \(incomingMessage)")
@@ -318,12 +320,6 @@ public class AgentClient: WebSocketClient.Delegate {
         } else {
             messages.append(message)
         }
-    }
-
-    public func setMessages(_ messages: [ChatMessage]) async throws {
-        let data = CFAgentChatMessages(messages: messages)
-        try await ws.send(data: try jsonEncoder.encode(data))
-        self.messages = messages
     }
 
     public func clearHistory() async throws {
