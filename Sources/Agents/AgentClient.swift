@@ -107,7 +107,7 @@ public class AgentClient: WebSocketClient.Delegate {
             chatTasks[msg.id] = task
             // Create a snapshot and update local messages list
             guard let snapshot = task.builder.snapshot() else { return }
-            upsertAssistantMessage(snapshot)
+            upsertMessages([snapshot])
             // Handle completion
             if msg.done == true {
                 task.resolve(snapshot)
@@ -131,9 +131,7 @@ public class AgentClient: WebSocketClient.Delegate {
             self.messages = []
             return
         case .cf_agent_chat_messages(let msg):
-            for m in msg.messages {
-                upsertAssistantMessage(m)
-            }
+            upsertMessages(msg.messages)
             return
         @unknown default:
             print("AgentClient: unknown type for incoming message: \(incomingMessage)")
@@ -320,6 +318,18 @@ public class AgentClient: WebSocketClient.Delegate {
         } else {
             messages.append(message)
         }
+    }
+
+    func upsertMessages(_ incoming: [ChatMessage]) {
+        var incoming = incoming
+        // replace existing messages by incoming messages with the same id
+        var newMessages = self.messages.map { existing in
+            guard let incomingIdx = incoming.firstIndex(where: { $0.id == existing.id })
+            else { return existing }  // keep original message
+            return incoming.remove(at: incomingIdx)  // replace by incoming message
+        }
+        newMessages.append(contentsOf: incoming)  // concat brand new incoming messages
+        self.messages = newMessages
     }
 
     public func clearHistory() async throws {
