@@ -93,12 +93,6 @@ public class AgentClient: WebSocketClient.Delegate {
             return
         case .cf_agent_use_chat_response(let msg):  // streaming only
             guard var task = chatTasks[msg.id] else { return }
-            // Handle error (before parsing body, since it contains the error)
-            if msg.error == true {
-                task.reject(.responseError(id: msg.id, message: msg.body))
-                chatTasks.removeValue(forKey: msg.id)
-                return
-            }
             // Apply chunks into the builder
             for chunk in ChatMessageChunk.parseAll(from: msg.body) {
                 task.builder.apply(chunk: chunk)
@@ -109,20 +103,27 @@ public class AgentClient: WebSocketClient.Delegate {
             guard let snapshot = task.builder.snapshot() else { return }
             upsertMessages([snapshot])
             // Handle completion
-            if msg.done == true {
-                task.resolve(snapshot)
-                chatTasks.removeValue(forKey: msg.id)
-                // advertise tool calls
-                for part in snapshot.parts {
-                    if case .tool(let toolPart) = part,
-                        case .inputAvailable = toolPart.state
-                    {
-                        delegate?.onToolCall(toolPart, self)
-                    }
-                    if case .dynamicTool(let toolPart) = part,
-                        case .inputAvailable = toolPart.state
-                    {
-                        delegate?.onDynamicToolCall(toolPart, self)
+            if task.builder.done {
+                if task.builder.error != nil {
+                    // reject task
+                    task.reject(.responseError(id: msg.id, message: msg.body))
+                    chatTasks.removeValue(forKey: msg.id)
+                } else {
+                    // resolve task
+                    task.resolve(snapshot)
+                    chatTasks.removeValue(forKey: msg.id)
+                    // advertise tool calls
+                    for part in snapshot.parts {
+                        if case .tool(let toolPart) = part,
+                            case .inputAvailable = toolPart.state
+                        {
+                            delegate?.onToolCall(toolPart, self)
+                        }
+                        if case .dynamicTool(let toolPart) = part,
+                            case .inputAvailable = toolPart.state
+                        {
+                            delegate?.onDynamicToolCall(toolPart, self)
+                        }
                     }
                 }
             }

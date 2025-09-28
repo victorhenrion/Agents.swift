@@ -9,12 +9,9 @@ package struct ChatMessageBuilder {
     private var parts = OrderedDictionary<String, ChatMessage.Part>()
 
     // public info
-    package private(set) var endState: EndState? = nil
-    package enum EndState {
-        case finished
-        case aborted
-        case errored(String)
-    }
+    package private(set) var done: Bool = false
+    package private(set) var error: String? = nil
+    package private(set) var aborted: Bool = false
 
     package init() {}
 
@@ -80,11 +77,13 @@ package struct ChatMessageBuilder {
             metadata = c.messageMetadata
         case .finish(let c):
             metadata = c.messageMetadata
-            endState = .finished
+            done = true
         case .abort(_):
-            endState = .aborted
+            done = true
+            aborted = true
         case .error(let c):
-            endState = .errored(c.errorText)
+            done = true
+            error = c.errorText
         case .messageMetadata(let m):
             metadata = m.messageMetadata
         }
