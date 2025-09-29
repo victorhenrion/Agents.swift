@@ -12,14 +12,14 @@ public class AgentClient: WebSocketClient.Delegate {
     // config
     private let instanceURL: URL
     private let headers: [String: String]?
-    private let delegate: Delegate?
-    private var ws: WebSocketClient!
+    @ObservationIgnored weak private var delegate: Delegate?
+    @ObservationIgnored private var ws: WebSocketClient!
     // state
     public private(set) var connected: Bool = false
     public private(set) var messages: [ChatMessage] = []
     public var failedMessages: [ChatMessage] = []
-    private var chatTasks: [String: ChatTask] = [:]
-    private var rpcTasks: [String: AnyRPCTask] = [:]
+    @ObservationIgnored private var chatTasks: [String: ChatTask] = [:]
+    @ObservationIgnored private var rpcTasks: [String: AnyRPCTask] = [:]
 
     public init(instanceURL: URL, headers: [String: String]? = nil, delegate: Delegate? = nil) {
         self.instanceURL = instanceURL
@@ -90,8 +90,8 @@ public class AgentClient: WebSocketClient.Delegate {
                 // handle result
                 task.resolve(result)
                 rpcTasks.removeValue(forKey: msg.id)
+                return
             }
-            return
         case .cf_agent_use_chat_response(let msg):  // streaming only
             guard var task = chatTasks[msg.id] else { return }
             // Apply chunks into the builder
@@ -175,8 +175,10 @@ public class AgentClient: WebSocketClient.Delegate {
         every: Duration = .seconds(1.5),
         getHeaders: (() async -> [String: String])? = nil
     ) async -> Bool {
-        func getURLRequest() async -> URLRequest {
-            let headers = (await getHeaders?()) ?? self.headers
+        let instanceURL = self.instanceURL
+        let defaultHeaders = self.headers
+        let getURLRequest: () async -> URLRequest = {
+            let headers = (await getHeaders?()) ?? defaultHeaders
             return URLRequest(url: instanceURL.replacingInScheme("http", with: "ws"))
                 .addingHeaders(headers)
         }
@@ -195,7 +197,10 @@ public class AgentClient: WebSocketClient.Delegate {
         let result = await sendChatRequest(
             message: message,
             body: body,
-            onSent: { messages.append(message) }
+            onSent: { [weak self] in
+                guard let self = self else { return }
+                self.messages.append(message)
+            }
         )
         switch result {
         case .success(let message): return message
@@ -223,8 +228,9 @@ public class AgentClient: WebSocketClient.Delegate {
             return .failure(.requestError(error))
         }
 
-        return await withCheckedContinuation { cont in
-            chatTasks[message.id] = ChatTask(
+        return await withCheckedContinuation { [weak self] cont in
+            guard let self = self else { return }
+            self.chatTasks[message.id] = ChatTask(
                 builder: ChatMessageBuilder(),
                 resolve: { r in cont.resume(returning: .success(r)) },
                 reject: { e in cont.resume(returning: .failure(e)) }
@@ -265,7 +271,8 @@ public class AgentClient: WebSocketClient.Delegate {
         } catch {
             return .failure(.requestError(error))
         }
-        return await withCheckedContinuation { cont in
+        return await withCheckedContinuation { [weak self] cont in
+            guard let self = self else { return }
             rpcTasks[requestId] = RPCTask(
                 onResolve: { r in cont.resume(returning: .success(r)) },
                 onReject: { e in cont.resume(returning: .failure(e)) }
@@ -324,7 +331,10 @@ public class AgentClient: WebSocketClient.Delegate {
 
         let result = await sendChatRequest(
             message: updatedMsg,
-            onSent: { messages[messages.count - 1] = updatedMsg }
+            onSent: { [weak self] in
+                guard let self = self else { return }
+                messages[messages.count - 1] = updatedMsg
+            }
         )
         switch result {
         case .success(let message): return message
@@ -375,7 +385,7 @@ public class AgentClient: WebSocketClient.Delegate {
         for id in ids { try? await cancelChatRequest(id: id) }
     }
 
-    public protocol Delegate {
+    public protocol Delegate: AnyObject {
         func onToolCall(_: ChatMessage.ToolPart, _: AgentClient)
         func onDynamicToolCall(_: ChatMessage.DynamicToolPart, _: AgentClient)
         func onClientStateUpdate<State: Codable>(_: State, _: AgentClient)

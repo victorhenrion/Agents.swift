@@ -2,18 +2,18 @@ import Foundation
 
 class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
     // config
-    let delegate: Delegate
+    private weak var delegate: Delegate?
     let messageFormat: MessageFormat
     let textEncoding: String.Encoding
     // state
-    let urlSessionQueue = OperationQueue()
+    private let urlSessionQueue = OperationQueue()
     private(set) var urlSession: URLSession!
     private(set) var webSocketTask: URLSessionWebSocketTask!
     private(set) var reconnectTask: Task<Bool, Never>?
     private(set) var isOpen: Bool = false
 
     init(
-        delegate: Delegate,
+        delegate: Delegate?,
         urlRequest: URLRequest,
         messageFormat: MessageFormat = .preserve,
         textEncoding: String.Encoding = .utf8
@@ -33,7 +33,7 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         didOpenWithProtocol `protocol`: String?
     ) {
         self.isOpen = true
-        self.delegate.onConnected()
+        self.delegate?.onConnected()
     }
 
     func urlSession(
@@ -43,7 +43,7 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         reason: Data?
     ) {
         self.isOpen = false
-        self.delegate.onDisconnected(error: nil)
+        self.delegate?.onDisconnected(error: nil)
     }
 
     func urlSession(
@@ -52,7 +52,7 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         didCompleteWithError error: Error?
     ) {
         self.isOpen = false
-        self.delegate.onDisconnected(error: error)
+        self.delegate?.onDisconnected(error: error)
     }
 
     // bad because we recreate a connection with each retry and always wait for the whole duration, but good enough for now
@@ -67,7 +67,8 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         if let task = reconnectTask, !task.isCancelled { return await task.value }
         // start task
         self.reconnectTask?.cancel()
-        let task = Task<Bool, Never> { @MainActor in
+        let task = Task<Bool, Never> { @MainActor [weak self] in
+            guard let self = self else { return false }
             defer { self.reconnectTask = nil }
             for _ in 0..<maxRetries {
                 // connected or cancelled
@@ -93,40 +94,45 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
     }
 
     func disconnect() {
+        reconnectTask?.cancel()
+        reconnectTask = nil
         webSocketTask.cancel(with: .goingAway, reason: nil)
+        urlSession?.invalidateAndCancel()
+        isOpen = false
     }
 
     private func listen() {
         webSocketTask.receive { [weak self] result in
             guard let self = self else { return }
+            guard let delegate = self.delegate else { return }
             switch result {
             case .failure(let error):
                 self.isOpen = false
-                self.delegate.onDisconnected(error: error)
+                delegate.onDisconnected(error: error)
 
             case .success(let message):
                 switch message {
                 case .string(let text):
                     switch self.messageFormat {
                     case .preserve, .text:
-                        self.delegate.onMessage(text: text)
+                        delegate.onMessage(text: text)
                     case .binary:
                         // Convert text to data for binary consumers
                         let data = text.data(using: self.textEncoding) ?? Data(text.utf8)
-                        self.delegate.onMessage(data: data)
+                        delegate.onMessage(data: data)
                     }
 
                 case .data(let data):
                     switch self.messageFormat {
                     case .preserve, .binary:
-                        self.delegate.onMessage(data: data)
+                        delegate.onMessage(data: data)
                     case .text:
                         // Try to decode as text; fall back to base64 string
                         if let s = String(data: data, encoding: self.textEncoding) {
-                            self.delegate.onMessage(text: s)
+                            delegate.onMessage(text: s)
                         } else {
                             let b64 = data.base64EncodedString()
-                            self.delegate.onMessage(text: b64)
+                            delegate.onMessage(text: b64)
                         }
                     }
 
@@ -142,17 +148,18 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
     }
 
     func send(text: String) async throws {
-        return try await withCheckedThrowingContinuation { cont in
-            switch messageFormat {
+        return try await withCheckedThrowingContinuation { [weak self] cont in
+            guard let self = self else { return }
+            switch self.messageFormat {
             case .preserve, .text:
-                webSocketTask.send(.string(text)) { error in
+                self.webSocketTask.send(.string(text)) { error in
                     if let error = error { cont.resume(throwing: error) } else { cont.resume() }
                 }
 
             case .binary:
                 // Force to binary frame
-                let data = text.data(using: textEncoding) ?? Data(text.utf8)
-                webSocketTask.send(.data(data)) { error in
+                let data = text.data(using: self.textEncoding) ?? Data(text.utf8)
+                self.webSocketTask.send(.data(data)) { error in
                     if let error = error { cont.resume(throwing: error) } else { cont.resume() }
                 }
             }
@@ -160,24 +167,30 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
     }
 
     func send(data: Data) async throws {
-        return try await withCheckedThrowingContinuation { cont in
-            switch messageFormat {
+        return try await withCheckedThrowingContinuation { [weak self] cont in
+            guard let self = self else { return }
+            switch self.messageFormat {
             case .preserve, .binary:
-                webSocketTask.send(.data(data)) { error in
+                self.webSocketTask.send(.data(data)) { error in
                     if let error = error { cont.resume(throwing: error) } else { cont.resume() }
                 }
 
             case .text:
                 // Try to make a text frame from the data; if not decodable, send base64 text
-                let text = String(data: data, encoding: textEncoding) ?? data.base64EncodedString()
-                webSocketTask.send(.string(text)) { error in
+                let text =
+                    String(data: data, encoding: self.textEncoding) ?? data.base64EncodedString()
+                self.webSocketTask.send(.string(text)) { error in
                     if let error = error { cont.resume(throwing: error) } else { cont.resume() }
                 }
             }
         }
     }
 
-    protocol Delegate {
+    deinit {
+        disconnect()
+    }
+
+    protocol Delegate: AnyObject {
         func onConnected()
         func onDisconnected(error: Error?)
         func onMessage(text: String)
