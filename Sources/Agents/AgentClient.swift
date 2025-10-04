@@ -38,6 +38,10 @@ public class AgentClient: WebSocketClient.Delegate {
         self.ws.connect()
     }
 
+    public func setMessages(_ messages: [ChatMessage]) {
+        self.messages = messages
+    }
+
     public func loadInitialMessages(headers latestHeaders: [String: String]? = nil) async throws {
         let urlRequest = URLRequest(
             url: instanceURL.replacingInScheme("ws", with: "http").appending(path: "get-messages")
