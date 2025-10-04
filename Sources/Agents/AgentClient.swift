@@ -12,7 +12,7 @@ open class AgentClient: WebSocketClient.Delegate {
     // config
     public let instanceURL: URL
     private let headers: [String: String]?
-    @ObservationIgnored weak private var delegate: Delegate?
+    weak public var delegate: Delegate?
     @ObservationIgnored private var ws: WebSocketClient!
     // state
     public private(set) var connected: Bool = false
