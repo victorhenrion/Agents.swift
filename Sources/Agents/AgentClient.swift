@@ -10,7 +10,7 @@ import MemberwiseInit
 @Observable
 public class AgentClient: WebSocketClient.Delegate {
     // config
-    private let instanceURL: URL
+    public let instanceURL: URL
     private let headers: [String: String]?
     @ObservationIgnored weak private var delegate: Delegate?
     @ObservationIgnored private var ws: WebSocketClient!
@@ -42,21 +42,24 @@ public class AgentClient: WebSocketClient.Delegate {
         self.messages = messages
     }
 
-    public func loadInitialMessages(headers latestHeaders: [String: String]? = nil) async throws {
+    public static func fetchMessages(
+        instanceURL: URL,
+        headers: [String: String]? = nil
+    ) async throws -> [ChatMessage] {
         let urlRequest = URLRequest(
             url: instanceURL.replacingInScheme("ws", with: "http").appending(path: "get-messages")
-        ).addingHeaders(latestHeaders ?? self.headers)
+        ).addingHeaders(headers)
 
         for attempt in 0...3 {
             do {
                 let (data, _) = try await URLSession.shared.data(for: urlRequest)
-                self.messages = try jsonDecoder.decode([ChatMessage].self, from: data)
-                return
+                return try jsonDecoder.decode([ChatMessage].self, from: data)
             } catch {
                 if attempt == 3 { throw error }
                 try? await Task.sleep(for: .seconds(1))
             }
         }
+        fatalError("AgentClient: unexpected")
     }
 
     func onMessage(text: String) {
@@ -188,7 +191,6 @@ public class AgentClient: WebSocketClient.Delegate {
                 .addingHeaders(headers)
         }
         let res = await ws.reconnect(every: every, retries: Int.max, getURLRequest: getURLRequest)
-        if res { try? await loadInitialMessages(headers: await getHeaders?()) }  // todo: what if this fails?
         return res
     }
 
