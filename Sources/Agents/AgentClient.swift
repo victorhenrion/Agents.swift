@@ -8,7 +8,7 @@ import MemberwiseInit
 // todo: handle task timeout
 // todo: implement cancel message (?)
 @Observable
-public class AgentClient: WebSocketClient.Delegate {
+open class AgentClient: WebSocketClient.Delegate {
     // config
     public let instanceURL: URL
     private let headers: [String: String]?
