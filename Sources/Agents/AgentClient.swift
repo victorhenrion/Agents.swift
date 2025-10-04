@@ -164,6 +164,7 @@ public class AgentClient: WebSocketClient.Delegate {
 
     func onConnected() {
         connected = true
+        delegate?.onConnected(self)
     }
 
     func onDisconnected(error: Error?) {
@@ -391,6 +392,7 @@ public class AgentClient: WebSocketClient.Delegate {
         func onClientStateUpdate<State: Codable>(_: State, _: AgentClient)
         func onServerStateUpdate<State: Codable>(_: State, _: AgentClient)
         func onMcpUpdate(_: MCPServersState, _: AgentClient)
+        func onConnected(_: AgentClient)
         func onDisconnected(_: Error?, _: AgentClient)
     }
 }
