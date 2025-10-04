@@ -16,6 +16,7 @@ open class AgentClient: WebSocketClient.Delegate {
     @ObservationIgnored private var ws: WebSocketClient!
     // state
     public private(set) var connected: Bool = false
+    public private(set) var lastConnectedAt: Date? = nil
     public private(set) var messages: [ChatMessage] = []
     public var failedMessages: [ChatMessage] = []
     @ObservationIgnored private var chatTasks: [String: ChatTask] = [:]
@@ -171,6 +172,7 @@ open class AgentClient: WebSocketClient.Delegate {
 
     func onConnected() {
         connected = true
+        lastConnectedAt = Date()
         delegate?.onConnected(self)
     }
 
