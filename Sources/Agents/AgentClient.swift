@@ -10,8 +10,6 @@ import MemberwiseInit
 @Observable
 open class AgentClient: WebSocketClient.Delegate {
     // config
-    public let instanceURL: URL
-    private let headers: [String: String]?
     weak public var delegate: Delegate?
     @ObservationIgnored private var ws: WebSocketClient!
     // state
@@ -22,20 +20,17 @@ open class AgentClient: WebSocketClient.Delegate {
     @ObservationIgnored private var chatTasks: [String: ChatTask] = [:]
     @ObservationIgnored private var rpcTasks: [String: AnyRPCTask] = [:]
 
-    public init(instanceURL: URL, headers: [String: String]? = nil, delegate: Delegate? = nil) {
-        self.instanceURL = instanceURL
-        self.headers = headers
+    public init(
+        url: URL,
+        headers: [String: String]?,
+        delegate: Delegate? = nil
+    ) {
         self.delegate = delegate
-
-        let urlRequest = URLRequest(
-            url: instanceURL.replacingInScheme("http", with: "ws")
-        ).addingHeaders(headers)
-
         self.ws = WebSocketClient(
             delegate: self,
-            urlRequest: urlRequest,
+            url: url,
+            headers: headers,
             messageFormat: .text)
-
         self.ws.connect()
     }
 
@@ -43,24 +38,9 @@ open class AgentClient: WebSocketClient.Delegate {
         self.messages = messages
     }
 
-    public static func fetchMessages(
-        instanceURL: URL,
-        headers: [String: String]? = nil
-    ) async throws -> [ChatMessage] {
-        let urlRequest = URLRequest(
-            url: instanceURL.replacingInScheme("ws", with: "http").appending(path: "get-messages")
-        ).addingHeaders(headers)
-
-        for attempt in 0...3 {
-            do {
-                let (data, _) = try await URLSession.shared.data(for: urlRequest)
-                return try jsonDecoder.decode([ChatMessage].self, from: data)
-            } catch {
-                if attempt == 3 { throw error }
-                try? await Task.sleep(for: .seconds(1))
-            }
-        }
-        fatalError("AgentClient: unexpected")
+    public func setMessages(_ data: Data) throws {
+        let messages = try jsonDecoder.decode([ChatMessage].self, from: data)
+        self.setMessages(messages)
     }
 
     func onMessage(text: String) {
@@ -183,17 +163,10 @@ open class AgentClient: WebSocketClient.Delegate {
 
     public func reconnect(
         every: Duration = .seconds(1.5),
-        getHeaders: (() async -> [String: String])? = nil
+        retries: Int = Int.max,
+        getHeaders: (() async -> [String: String]?)?
     ) async -> Bool {
-        let instanceURL = self.instanceURL
-        let defaultHeaders = self.headers
-        let getURLRequest: () async -> URLRequest = {
-            let headers = (await getHeaders?()) ?? defaultHeaders
-            return URLRequest(url: instanceURL.replacingInScheme("http", with: "ws"))
-                .addingHeaders(headers)
-        }
-        let res = await ws.reconnect(every: every, retries: Int.max, getURLRequest: getURLRequest)
-        return res
+        return await ws.reconnect(every: every, retries: retries, getHeaders: getHeaders)
     }
 
     public func sendMessage(
@@ -394,6 +367,10 @@ open class AgentClient: WebSocketClient.Delegate {
         for id in ids { try? await cancelChatRequest(id: id) }
     }
 
+    public func getSocketURL() -> URL {
+        return ws.currentURL
+    }
+
     public protocol Delegate: AnyObject {
         func onToolCall(_: ChatMessage.ToolPart, _: AgentClient)
         func onDynamicToolCall(_: ChatMessage.DynamicToolPart, _: AgentClient)
@@ -443,25 +420,6 @@ struct ChatTask {
     var builder: ChatMessageBuilder
     let resolve: (ChatMessage) -> Void
     let reject: (ChatError) -> Void
-}
-
-extension URL {
-    fileprivate func replacingInScheme(_ of: String, with: String) -> URL {
-        guard var comps = URLComponents(url: self, resolvingAgainstBaseURL: false)
-        else { return self }
-        comps.scheme = comps.scheme?.replacingOccurrences(of: of, with: with)
-        return comps.url ?? self
-    }
-}
-
-extension URLRequest {
-    fileprivate func addingHeaders(_ dict: [String: String]?) -> URLRequest {
-        var req = self
-        for (key, value) in dict ?? [:] {
-            req.addValue(value, forHTTPHeaderField: key)
-        }
-        return req
-    }
 }
 
 private let jsonDecoder = {

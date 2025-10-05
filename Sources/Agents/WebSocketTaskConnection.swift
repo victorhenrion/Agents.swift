@@ -5,6 +5,7 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
     private weak var delegate: Delegate?
     let messageFormat: MessageFormat
     let textEncoding: String.Encoding
+    private(set) var currentURL: URL
     // state
     private let urlSessionQueue = OperationQueue()
     private(set) var urlSession: URLSession!
@@ -14,17 +15,22 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
 
     init(
         delegate: Delegate?,
-        urlRequest: URLRequest,
+        url: URL,
+        headers: [String: String]?,
         messageFormat: MessageFormat = .preserve,
         textEncoding: String.Encoding = .utf8
     ) {
         self.delegate = delegate
         self.messageFormat = messageFormat
         self.textEncoding = textEncoding
+        self.currentURL = url
         super.init()
+        let configuration = URLSessionConfiguration.default
+        configuration.httpAdditionalHeaders = headers
         self.urlSession = URLSession(
-            configuration: .default, delegate: self, delegateQueue: self.urlSessionQueue)
-        self.webSocketTask = self.urlSession.webSocketTask(with: urlRequest)
+            configuration: configuration, delegate: self, delegateQueue: self.urlSessionQueue)
+        self.webSocketTask = self.urlSession.webSocketTask(
+            with: url.replacingInScheme("http", with: "ws"))
     }
 
     func urlSession(
@@ -32,6 +38,8 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         webSocketTask: URLSessionWebSocketTask,
         didOpenWithProtocol `protocol`: String?
     ) {
+        self.currentURL =
+            webSocketTask.currentRequest?.url ?? webSocketTask.response?.url ?? currentURL
         self.isOpen = true
         self.delegate?.onConnected()
     }
@@ -42,6 +50,8 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?
     ) {
+        self.currentURL =
+            webSocketTask.currentRequest?.url ?? webSocketTask.response?.url ?? currentURL
         self.isOpen = false
         self.delegate?.onDisconnected(error: nil)
     }
@@ -51,6 +61,8 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         task: URLSessionTask,
         didCompleteWithError error: Error?
     ) {
+        self.currentURL =
+            webSocketTask.currentRequest?.url ?? webSocketTask.response?.url ?? currentURL
         self.isOpen = false
         self.delegate?.onDisconnected(error: error)
     }
@@ -59,7 +71,7 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
     public func reconnect(
         every: Duration,
         retries maxRetries: Int,
-        getURLRequest: @escaping () async -> URLRequest
+        getHeaders: (() async -> [String: String]?)?
     ) async -> Bool {
         // already connected
         if self.isOpen { return true }
@@ -75,7 +87,9 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
                 if self.isOpen || Task.isCancelled { break }
                 // reconnect
                 self.webSocketTask.cancel(with: .goingAway, reason: nil)
-                self.webSocketTask = self.urlSession.webSocketTask(with: await getURLRequest())
+                self.urlSession.configuration.httpAdditionalHeaders = await getHeaders?()
+                self.webSocketTask = self.urlSession.webSocketTask(
+                    with: self.currentURL.replacingInScheme("http", with: "ws"))
                 self.isOpen = false  // ensure it didn't change in the meantime
                 self.connect()
                 // wait
@@ -201,5 +215,14 @@ class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
         case preserve  // default: preserve frame type (text stays text, data stays data)
         case text  // force both directions to be text frames
         case binary  // force both directions to be binary frames
+    }
+}
+
+extension URL {
+    fileprivate func replacingInScheme(_ of: String, with: String) -> URL {
+        guard var comps = URLComponents(url: self, resolvingAgainstBaseURL: false)
+        else { return self }
+        comps.scheme = comps.scheme?.replacingOccurrences(of: of, with: with)
+        return comps.url ?? self
     }
 }
