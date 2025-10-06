@@ -3,7 +3,7 @@ import ISO8601JSON
 import KarrotCodableKit
 
 @PolymorphicEnumDecodable(identifierCodingKey: "type", fallbackCaseName: "data")
-package enum ChatMessageChunk {
+public enum ChatMessageChunk {
     case textStart(TextStart)
     case textDelta(TextDelta)
     case textEnd(TextEnd)
@@ -29,50 +29,50 @@ package enum ChatMessageChunk {
     case messageMetadata(MessageMetadata)
 
     @PolymorphicDecodable(identifier: "text-start")
-    package struct TextStart {
+    public struct TextStart {
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "text-delta")
-    package struct TextDelta {
+    public struct TextDelta {
         let delta: String
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "text-end")
-    package struct TextEnd {
+    public struct TextEnd {
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "reasoning-start")
-    package struct ReasoningStart {
+    public struct ReasoningStart {
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "reasoning-delta")
-    package struct ReasoningDelta {
+    public struct ReasoningDelta {
         let id: String
         let delta: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "reasoning-end")
-    package struct ReasoningEnd {
+    public struct ReasoningEnd {
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "error")
-    package struct Error {
+    public struct Error {
         let errorText: String
     }
 
     @PolymorphicDecodable(identifier: "tool-input-available")
-    package struct ToolInputAvailable {
+    public struct ToolInputAvailable {
         let toolCallId: String
         let toolName: String
         let input: AnyCodable
@@ -82,7 +82,7 @@ package enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "tool-input-error")
-    package struct ToolInputError {
+    public struct ToolInputError {
         let toolCallId: String
         let toolName: String
         let input: AnyCodable?
@@ -93,7 +93,7 @@ package enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "tool-output-available")
-    package struct ToolOutputAvailable {
+    public struct ToolOutputAvailable {
         let toolCallId: String
         let output: AnyCodable
         let providerExecuted: Bool?
@@ -102,7 +102,7 @@ package enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "tool-output-error")
-    package struct ToolOutputError {
+    public struct ToolOutputError {
         let toolCallId: String
         let errorText: String
         let providerExecuted: Bool?
@@ -110,7 +110,7 @@ package enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "tool-input-start")
-    package struct ToolInputStart {
+    public struct ToolInputStart {
         let toolCallId: String
         let toolName: String
         let providerExecuted: Bool?
@@ -118,13 +118,13 @@ package enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "tool-input-delta")
-    package struct ToolInputDelta {
+    public struct ToolInputDelta {
         let toolCallId: String
         let inputTextDelta: String
     }
 
     @PolymorphicDecodable(identifier: "source-url")
-    package struct SourceURL {
+    public struct SourceURL {
         let sourceId: String
         let url: String
         let title: String?
@@ -132,7 +132,7 @@ package enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "source-document")
-    package struct SourceDocument {
+    public struct SourceDocument {
         let sourceId: String
         let mediatype: String
         let title: String
@@ -141,14 +141,14 @@ package enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "file")
-    package struct File {
+    public struct File {
         let url: String
         let mediatype: String
     }
 
     // this is our fallback type, if chunk doesn't conform to it, it will throw (good)
     @PolymorphicDecodable(identifier: "data")  // ->>> this is required but then I think we loose or custom type, which is an issue in the builder (TODO: check this)
-    package struct Data {
+    public struct Data {
         let type: String  // "data-{name}"
         let id: String?
         let data: AnyCodable
@@ -156,38 +156,38 @@ package enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "start-step")
-    package struct StartStep {
+    public struct StartStep {
     }
 
     @PolymorphicDecodable(identifier: "finish-step")
-    package struct FinishStep {
+    public struct FinishStep {
     }
 
     @PolymorphicDecodable(identifier: "start")
-    package struct Start {
+    public struct Start {
         let messageId: String?
         let messageMetadata: AnyCodable?
     }
 
     @PolymorphicDecodable(identifier: "finish")
-    package struct Finish {
+    public struct Finish {
         let messageMetadata: AnyCodable?
     }
 
     @PolymorphicDecodable(identifier: "abort")
-    package struct Abort {
+    public struct Abort {
     }
 
     @PolymorphicDecodable(identifier: "message-metadata")
-    package struct MessageMetadata {
+    public struct MessageMetadata {
         let messageMetadata: AnyCodable
     }
 
-    package typealias ProviderMetadata = [String: [String: AnyCodable]]
+    public typealias ProviderMetadata = [String: [String: AnyCodable]]
 }
 
 extension ChatMessageChunk {
-    package static func parseAll(from raw: String) -> [ChatMessageChunk] {
+    public static func parseAll(from raw: String) -> [ChatMessageChunk] {
         var chunks: [ChatMessageChunk] = []
         for line in raw.split(separator: "\n") {
             if let data = String(line).data(using: .utf8),

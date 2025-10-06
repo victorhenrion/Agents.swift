@@ -2,20 +2,20 @@ import Foundation
 import KarrotCodableKit
 import OrderedCollections
 
-package struct ChatMessageBuilder {
+public struct ChatMessageBuilder {
     // internal builder
     private var id: String?
     private var metadata: AnyCodable?
     private var parts = OrderedDictionary<String, ChatMessage.Part>()
 
     // public info
-    package private(set) var done: Bool = false
-    package private(set) var error: String? = nil
-    package private(set) var aborted: Bool = false
+    public private(set) var done: Bool = false
+    public private(set) var error: String? = nil
+    public private(set) var aborted: Bool = false
 
-    package init() {}
+    public init() {}
 
-    package mutating func apply(chunk: ChatMessageChunk) {
+    public mutating func apply(chunk: ChatMessageChunk) {
         switch chunk {
         case .textStart(let c):
             parts[c.id] = .text(.init(c))
@@ -90,7 +90,7 @@ package struct ChatMessageBuilder {
         // (no cases should be missed)
     }
 
-    package func snapshot() -> ChatMessage? {
+    public func snapshot() -> ChatMessage? {
         guard let messageId = id else { return nil }  // means missing start frame
 
         return ChatMessage(
