@@ -3,7 +3,7 @@ import KarrotCodableKit
 import MemberwiseInit
 
 @MemberwiseInit(.public)
-public struct ChatMessage: Codable, Identifiable {
+public struct ChatMessage: Codable, Identifiable, Hashable {
     public let id: String
     public let role: Role
     public let metadata: AnyCodable?
@@ -18,7 +18,7 @@ public struct ChatMessage: Codable, Identifiable {
     public typealias Part = MessagePart
 
     @PolymorphicCodable(identifier: "text") @MemberwiseInit(.public)
-    public struct TextPart {
+    public struct TextPart: Hashable {
         public let type = "text"
         public var text: String
         public var state: State?
@@ -35,7 +35,7 @@ public struct ChatMessage: Codable, Identifiable {
     }
 
     @PolymorphicCodable(identifier: "reasoning") @MemberwiseInit(.public)
-    public struct ReasoningPart {
+    public struct ReasoningPart: Hashable {
         public let type = "reasoning"
         public var text: String
         public var state: State?
@@ -73,7 +73,7 @@ public struct ChatMessage: Codable, Identifiable {
     }
 
     @PolymorphicCodable(identifier: "dynamic-tool") @MemberwiseInit(.public)
-    public struct DynamicToolPart: AnyToolPart {
+    public struct DynamicToolPart: AnyToolPart, Hashable {
         public let type = "dynamic-tool"
         public let toolName: String
         public let toolCallId: String
@@ -88,7 +88,7 @@ public struct ChatMessage: Codable, Identifiable {
     }
 
     @PolymorphicCodable(identifier: "source-url") @MemberwiseInit(.public)
-    public struct SourceURLPart {
+    public struct SourceURLPart: Hashable {
         public let type = "source-url"
         public let sourceId: String
         public let url: String
@@ -97,7 +97,7 @@ public struct ChatMessage: Codable, Identifiable {
     }
 
     @PolymorphicCodable(identifier: "source-document") @MemberwiseInit(.public)
-    public struct SourceDocumentPart {
+    public struct SourceDocumentPart: Hashable {
         public let type = "source-document"
         public let sourceId: String
         public let mediaType: String
@@ -107,7 +107,7 @@ public struct ChatMessage: Codable, Identifiable {
     }
 
     @PolymorphicCodable(identifier: "file") @MemberwiseInit(.public)
-    public struct FilePart {
+    public struct FilePart: Hashable {
         public let type = "file"
         public let mediaType: String
         public let filename: String?
@@ -116,12 +116,12 @@ public struct ChatMessage: Codable, Identifiable {
     }
 
     @PolymorphicCodable(identifier: "step-start") @MemberwiseInit(.public)
-    public struct StepStartPart {
+    public struct StepStartPart: Hashable {
         public let type = "step-start"
     }
 
     @PolymorphicCodable(identifier: "tool") @MemberwiseInit(.public)
-    public struct ToolPart: AnyToolPart {
+    public struct ToolPart: AnyToolPart, Hashable {
         public let type: String  // tool-{name}
         public var toolName: String { type.deletingPrefix("tool-") }
         public let toolCallId: String
@@ -136,7 +136,7 @@ public struct ChatMessage: Codable, Identifiable {
     }
 
     @PolymorphicCodable(identifier: "data") @MemberwiseInit(.public)
-    public struct DataPart {
+    public struct DataPart: Hashable {
         public let type: String  // data-{name}
         public var dataType: String { type.deletingPrefix("data-") }
         public let id: String?
@@ -147,7 +147,7 @@ public struct ChatMessage: Codable, Identifiable {
 }
 
 @PolymorphicEnumEncodable(identifierCodingKey: "type")  // EnumEncodable only, decode is custom
-public enum MessagePart: Decodable {
+public enum MessagePart: Decodable, Hashable {
     case text(ChatMessage.TextPart)
     case reasoning(ChatMessage.ReasoningPart)
     case dynamicTool(ChatMessage.DynamicToolPart)

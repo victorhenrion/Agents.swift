@@ -3,7 +3,7 @@ import ISO8601JSON
 import KarrotCodableKit
 
 @PolymorphicEnumDecodable(identifierCodingKey: "type", fallbackCaseName: "data")
-public enum ChatMessageChunk {
+public enum ChatMessageChunk: Hashable {
     case textStart(TextStart)
     case textDelta(TextDelta)
     case textEnd(TextEnd)
@@ -29,50 +29,50 @@ public enum ChatMessageChunk {
     case messageMetadata(MessageMetadata)
 
     @PolymorphicDecodable(identifier: "text-start")
-    public struct TextStart {
+    public struct TextStart: Hashable {
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "text-delta")
-    public struct TextDelta {
+    public struct TextDelta: Hashable {
         let delta: String
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "text-end")
-    public struct TextEnd {
+    public struct TextEnd: Hashable {
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "reasoning-start")
-    public struct ReasoningStart {
+    public struct ReasoningStart: Hashable {
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "reasoning-delta")
-    public struct ReasoningDelta {
+    public struct ReasoningDelta: Hashable {
         let id: String
         let delta: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "reasoning-end")
-    public struct ReasoningEnd {
+    public struct ReasoningEnd: Hashable {
         let id: String
         let providerMetadata: ProviderMetadata?
     }
 
     @PolymorphicDecodable(identifier: "error")
-    public struct Error {
+    public struct Error: Hashable {
         let errorText: String
     }
 
     @PolymorphicDecodable(identifier: "tool-input-available")
-    public struct ToolInputAvailable {
+    public struct ToolInputAvailable: Hashable {
         let toolCallId: String
         let toolName: String
         let input: AnyCodable
@@ -82,7 +82,7 @@ public enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "tool-input-error")
-    public struct ToolInputError {
+    public struct ToolInputError: Hashable {
         let toolCallId: String
         let toolName: String
         let input: AnyCodable?
@@ -93,7 +93,7 @@ public enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "tool-output-available")
-    public struct ToolOutputAvailable {
+    public struct ToolOutputAvailable: Hashable {
         let toolCallId: String
         let output: AnyCodable
         let providerExecuted: Bool?
@@ -102,7 +102,7 @@ public enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "tool-output-error")
-    public struct ToolOutputError {
+    public struct ToolOutputError: Hashable {
         let toolCallId: String
         let errorText: String
         let providerExecuted: Bool?
@@ -110,7 +110,7 @@ public enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "tool-input-start")
-    public struct ToolInputStart {
+    public struct ToolInputStart: Hashable {
         let toolCallId: String
         let toolName: String
         let providerExecuted: Bool?
@@ -118,13 +118,13 @@ public enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "tool-input-delta")
-    public struct ToolInputDelta {
+    public struct ToolInputDelta: Hashable {
         let toolCallId: String
         let inputTextDelta: String
     }
 
     @PolymorphicDecodable(identifier: "source-url")
-    public struct SourceURL {
+    public struct SourceURL: Hashable {
         let sourceId: String
         let url: String
         let title: String?
@@ -132,7 +132,7 @@ public enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "source-document")
-    public struct SourceDocument {
+    public struct SourceDocument: Hashable {
         let sourceId: String
         let mediatype: String
         let title: String
@@ -141,14 +141,14 @@ public enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "file")
-    public struct File {
+    public struct File: Hashable {
         let url: String
         let mediatype: String
     }
 
     // this is our fallback type, if chunk doesn't conform to it, it will throw (good)
     @PolymorphicDecodable(identifier: "data")  // ->>> this is required but then I think we loose or custom type, which is an issue in the builder (TODO: check this)
-    public struct Data {
+    public struct Data: Hashable {
         let type: String  // "data-{name}"
         let id: String?
         let data: AnyCodable
@@ -156,30 +156,30 @@ public enum ChatMessageChunk {
     }
 
     @PolymorphicDecodable(identifier: "start-step")
-    public struct StartStep {
+    public struct StartStep: Hashable {
     }
 
     @PolymorphicDecodable(identifier: "finish-step")
-    public struct FinishStep {
+    public struct FinishStep: Hashable {
     }
 
     @PolymorphicDecodable(identifier: "start")
-    public struct Start {
+    public struct Start: Hashable {
         let messageId: String?
         let messageMetadata: AnyCodable?
     }
 
     @PolymorphicDecodable(identifier: "finish")
-    public struct Finish {
+    public struct Finish: Hashable {
         let messageMetadata: AnyCodable?
     }
 
     @PolymorphicDecodable(identifier: "abort")
-    public struct Abort {
+    public struct Abort: Hashable {
     }
 
     @PolymorphicDecodable(identifier: "message-metadata")
-    public struct MessageMetadata {
+    public struct MessageMetadata: Hashable {
         let messageMetadata: AnyCodable
     }
 
