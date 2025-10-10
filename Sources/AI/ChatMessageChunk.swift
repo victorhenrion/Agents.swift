@@ -73,12 +73,12 @@ public enum ChatMessageChunk: Hashable {
 
     @PolymorphicDecodable(identifier: "tool-input-available")
     public struct ToolInputAvailable: Hashable {
-        let toolCallId: String
-        let toolName: String
-        let input: AnyCodable
-        let providerExecuted: Bool?
-        let providerMetadata: ProviderMetadata?
-        let dynamic: Bool?
+        public let toolCallId: String
+        public let toolName: String
+        public let input: AnyCodable
+        public let providerExecuted: Bool?
+        public let providerMetadata: ProviderMetadata?
+        public let dynamic: Bool?
     }
 
     @PolymorphicDecodable(identifier: "tool-input-error")
